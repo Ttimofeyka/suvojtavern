@@ -1,0 +1,2827 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Chat screen styles — the C3 chat experience.
+ *
+ * Owns the Chats view layout (history column + conversation panel), the chat
+ * list, the conversation header, the transcript (bubbles, hover actions,
+ * inline edit, live stream), the composer, and the chat drawer (tracker,
+ * summaries, and plugin tabs).
+ * Everything builds on the shared layers: tokens (tokens.css), theme colors
+ * (themes.css), primitives (base.css), and keyframes/motion utilities
+ * (motion.css).
+ *
+ * House rules, per DESIGN.md:
+ *  - zero hardcoded colors — every color/border/shadow flows from theme vars
+ *    (color-mix over those vars for tints);
+ *  - entrance/exit choreography is JS Motion (lib/motion.ts, read through
+ *    useAppMotion so the OS and app motion knobs both collapse it); this file
+ *    keeps only the presentation and the CSS-only affordances (the hover
+ *    action reveal, the streaming caret loop), which still animate
+ *    transform/opacity on the --dur/--ease tokens;
+ *  - entrance staggers cap at ~10 items (each component clamps its index)
+ *    so long histories never queue hundreds of delays.
+ */
+
+/* === View layout ========================================================== */
+
+/* Full-bleed flex row: the history column and the conversation pane meet
+   edge to edge, separated only by the column's own hairline. Flex (not grid)
+   so the history column can animate its width as it is hidden/shown, and
+   .chats-main takes the remaining space. */
+.chats-layout {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
+
+  /* History-column hide/show duration. --dur-collapse is scoped to .app-shell
+     (shell.css), so the chat pane defines its own copy; children inherit it.
+     Derived from --motion-scale like the shell's, so motion=off also stops
+     the column hide and the mobile chats slide-over animating at full speed
+     instead of the old fixed 400ms. */
+  --dur-collapse: calc(400ms * var(--motion-scale));
+}
+
+/* History column: a scrollable list with the new-chat trigger in its head.
+   Flush against the conversation pane — the hairline edge is the only
+   separation, so the recessed surface makes it read. Its definite width is
+   what the hide/show animates: width 300px + a 240px min-width (shrink is
+   allowed down to the floor). overflow clips the content as the rail narrows
+   to nothing. */
+.chats-side {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  gap: var(--space-3);
+  width: 300px;
+  min-width: 240px;
+  min-height: 0;
+  overflow: hidden;
+  border-right: var(--hairline);
+  background: var(--bg-subtle);
+  /* The collapse is a layout change, not an animated width: transitioning the
+     column width made every prose line re-wrap for 400ms, which is exactly the
+     kind of sustained main-thread work the transcript cannot afford while a
+     reply streams. The panel snaps to its new width and only its paint fades. */
+  transition:
+    opacity var(--dur-med) var(--ease-out),
+    visibility var(--dur-collapse) var(--ease-out);
+}
+
+/* Conversation pane: full-bleed — no card, no inset; it is the canvas itself,
+   with its three rows (header / transcript / composer) managing their own
+   padding. --chat-gutter is the shared horizontal padding so their text lines
+   up. Keeps the positioning context for the chat drawer. */
+.chats-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Fills the space the rail leaves behind. */
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  --chat-gutter: var(--space-4);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Auto margins center the card in the flex row/column (place-self only
+   applies in grid, so it is kept for the .chats-empty-screen case). */
+.chats-empty {
+  place-self: center;
+  margin: auto;
+  max-width: min(420px, 100%);
+}
+
+/* Mobile chat-history slide-over scrim: rendered only while the drawer is
+   open, but inert on desktop (where the ≤760px block in the responsive
+   section turns it into the dimming overlay). */
+.mobile-chats-scrim {
+  display: none;
+}
+
+/* No-chats screen: with the list loaded and chat-free, one centered empty
+   state replaces the whole two-column layout, so the sidebar's and the main
+   pane's empty messages never double up. */
+.chats-empty-screen {
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-3);
+}
+
+/* === Side column =========================================================== */
+
+.chats-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.picker-status {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-muted);
+}
+
+/* === Side column: chat history ============================================= */
+
+.chat-history {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: var(--space-1);
+  min-height: 0;
+  overflow-y: auto;
+  /* Reserve the scrollbar's width even when the content does not overflow:
+     expanding/collapsing a group can cross the overflow threshold, and
+     without a stable gutter the list's inner width would shift ~8px each
+     time the scrollbar appears/disappears. */
+  scrollbar-gutter: stable;
+  /* Bottom padding is deeper by the .anim-rise travel (8px): a freshly
+     expanded chat row starts translated 8px down, which momentarily extends
+     this scroll container's overflow during the ~200ms entrance and paints a
+     scrollbar that then vanishes. The extra room absorbs the transform so the
+     overflow never crosses the threshold. */
+  padding: var(--space-1) var(--space-1) calc(var(--space-1) + var(--space-2));
+}
+
+.chat-history-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+.chat-history-caption {
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+/* Pushes the head's trailing action (the new-chat trigger) to the right. */
+.chat-history-spacer {
+  flex: 1 1 auto;
+}
+
+/* Loaded-but-empty list (a stale open chat against a store that settled
+   empty): the shared empty-state vocabulary (icon + title + hint), tightened
+   for the narrow column. The full empty screen one level up owns the no-chats
+   case. */
+.chat-history-empty {
+  margin: auto;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-3);
+}
+
+/* The new-chat trigger: a small ghost square-pen button, sized and tinted
+   like the row actions. Scoped overrides of .btn-icon give it a visible
+   hover tint — the base .btn-ghost hover is text-only (underline). */
+.chat-history-head .btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  color: var(--fg-faint);
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .chat-history-head .btn-icon:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+    text-decoration: none;
+  }
+}
+
+/* Chat groups: the list organizes chats BY CHARACTER. The head is a plain
+   flex row holding two controls: the identity button (avatar + name) opens
+   the character's most recent chat, and the chevron button expands/collapses
+   the chat items under it. The items are just a timestamp + last-message
+   preview, since a chat itself has neither a name nor an avatar. */
+.chat-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+/* Skeleton head: the loaded head's padding/gap live on .chat-group-open,
+   which the skeleton does not render — restore the row spacing here so the
+   placeholder lines up with the settled list. */
+.chat-group-head-skeleton {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* Identity button: opens the character's most recent chat. Fills the head so
+   the whole row stays clickable, with the name free to ellipsize. */
+.chat-group-open {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* Hover tint is neutral (--surface-hover) and gated to real hover devices:
+   on touch a tap would otherwise leave a sticky :hover on the last-tapped
+   row. */
+@media (hover: hover) {
+  .chat-group-open:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* Chevron button: a small ghost square that toggles the group's chat items. */
+.chat-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.chat-group-toggle:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) {
+  .chat-group-toggle:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+  }
+}
+
+.chat-group-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
+  color: var(--accent);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-body-bold);
+}
+
+.chat-group-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
+}
+
+/* Collapse chevron: turned sideways while collapsed; the toggle button's
+   aria-expanded carries the state for assistive tech. */
+.chat-group-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--fg-faint);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.chat-group-toggle[aria-expanded="false"] .chat-group-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Chat lines sit indented under their character head, under its name. */
+.chat-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: calc(30px + var(--space-2) + var(--space-1));
+}
+
+/* A chat element: timestamp + last-message preview, nothing more. */
+.chat-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .chat-item:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* Active chat: accent-tinted pill with a whisper of a leading accent bar,
+   mirroring the sidebar's active nav link. Defined after the hover tint so it
+   wins on hover too (equal specificity, later rule). */
+.chat-item.chat-item-active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.chat-item.chat-item-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+.chat-item-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.chat-item-btn:active {
+  transform: scale(0.98);
+}
+
+.chat-item-preview {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  color: var(--fg-muted);
+}
+
+.chat-item-time {
+  flex: none;
+  font-size: var(--fs-badge);
+  letter-spacing: var(--ls-badge);
+  color: var(--fg-faint);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* Remove action: a ghost trash that fades in over the timestamp on hover
+   and on focus-within (keyboard users tab straight onto it). The 32px hit
+   area matches the other row actions; it still sits clear of the timestamp
+   it fades over. */
+.chat-item-delete {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  translate: 0 -50%;
+  z-index: var(--z-raised);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: pointer;
+  touch-action: manipulation;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.chat-item-delete:active {
+  transform: scale(0.97);
+}
+
+/* Keyboard focus reveals the action on every device (not hover state). */
+.chat-item:focus-within .chat-item-delete {
+  opacity: 1;
+}
+
+.chat-item:focus-within .chat-item-time {
+  opacity: 0;
+}
+
+/* Pointer hover reveals the action and yields the timestamp. Gated behind
+   (hover: hover): on touch a sticky :hover would otherwise pin the trash
+   open (the touch path shows it unconditionally — see the hover:none block). */
+@media (hover: hover) {
+  .chat-item:hover .chat-item-delete {
+    opacity: 1;
+  }
+
+  .chat-item:hover .chat-item-time {
+    opacity: 0;
+  }
+
+  .chat-item-delete:hover {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+}
+
+/* Skeleton groups while the first chat refresh is in flight: one placeholder
+   head (avatar, name, chevron toggle) per row, matching the shape the loaded
+   list settles into — every group starts collapsed, so a head is all the real
+   list shows at first. */
+.chat-group .skeleton {
+  border-radius: var(--radius-full);
+}
+
+/* The head's chevron placeholder: a square matching the real toggle, placed
+   after the .chat-group .skeleton rule above so its corner wins over the
+   blanket rounding. */
+.chat-group-head .chat-skeleton-toggle {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.sk-line {
+  height: 10px;
+  border-radius: var(--radius-full);
+}
+
+/* === New chat modal ========================================================= */
+
+/* Controls row: the search field grows, the persona select keeps its width. */
+.new-chat-controls {
+  align-items: flex-end;
+}
+
+.new-chat-controls .search-field {
+  flex: 1 1 180px;
+}
+
+.new-chat-persona {
+  flex: 0 1 220px;
+}
+
+/* The order picker sits between the persona select and the view toggle; a
+   shrinkable basis keeps it compact next to the growable search field. */
+.new-chat-sort {
+  flex: 0 1 160px;
+}
+
+/* The view toggle keeps its intrinsic width and parks at the trailing edge of
+   the row, clear of the growable search field and persona select. */
+.new-chat-controls .view-toggle {
+  flex: none;
+  margin-left: auto;
+}
+
+/* Dense controls stack: the search field takes its own full row and the toggle
+   wraps under it (mirrors the Characters toolbar at the same breakpoint). */
+@media (max-width: 600px) {
+  .new-chat-controls .search-field {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+/* Compact character tiles: a square thumbnail over a name + chat count. */
+.new-chat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--space-2);
+}
+
+.new-chat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0;
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  /* No transform transition: the tile's entrance and hover lift are Motion
+     (CharacterTiles), and a CSS transition would fight the inline transform. */
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .new-chat-tile:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+.new-chat-tile-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  /* Matches .new-chat-tile's inner curve (radius-lg minus its 1px border). */
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+  border-bottom: var(--hairline);
+  background: var(--bg-subtle);
+}
+
+.new-chat-tile-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.new-chat-tile-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--fg-faint);
+  font-size: 1.5rem;
+  font-weight: var(--fw-body-bold);
+  user-select: none;
+}
+
+.new-chat-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  min-width: 0;
+}
+
+.new-chat-tile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.new-chat-tile-meta {
+  color: var(--fg-muted);
+}
+
+/* Tile hover tints the name — kept after .new-chat-tile-name above so
+   specificity ascends (lint-friendly), and gated to real hover devices like
+   the Characters rows' name tint. */
+@media (hover: hover) {
+  .new-chat-tile:hover .new-chat-tile-name {
+    color: var(--accent);
+  }
+}
+
+/* Long paged tile grids render only what is near the viewport. The tile's own
+   border and box-shadow paint on the tile's own box, not as descendants, so
+   they are NOT clipped by `content-visibility`'s paint containment (which
+   clips descendants, spec §3.5) — containment is safe here, unlike
+   .char-card's hover shadow, which is a descendant `.card-hover::after`
+   pseudo-element and would be clipped. `contain-intrinsic-size: auto 168px`
+   is a measured tile at the grid's 104px column floor, keeping the scrollbar
+   stable until each tile's real height is measured. */
+.new-chat-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 168px;
+}
+
+/* Skeleton tiles while the first load is in flight. */
+.new-chat-skeleton-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.new-chat-skeleton-media {
+  aspect-ratio: 1;
+}
+
+/* Compact picker rows: the picker's default layout, visually paired with the
+   Characters tab's `.char-row` list. Both picker call sites import views.css,
+   so the shared `.char-row-*` geometry and `.char-card-meta` come from there. */
+.new-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.new-chat-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  /* No transform transition: the row's entrance and tap are Motion
+     (CharacterTiles), and a CSS transition would fight the inline transform. */
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .new-chat-row:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+}
+
+/* Decorative accent tint on the row name; the row is a button and stays
+   actionable without it, so it is gated to real hover devices (matching the
+   Characters tab rows). */
+@media (hover: hover) {
+  .new-chat-row:hover .char-row-name {
+    color: var(--accent);
+  }
+}
+
+/* The tile fallback is sized for a large square; a 44px row avatar needs the
+   smaller size, same as `.char-row-avatar .avatar-fallback` (views.css). */
+.new-chat-row .new-chat-tile-fallback {
+  font-size: 1.125rem;
+}
+
+/* Long paged row lists render only what is near the viewport. Same contract as
+   `.new-chat-tile`: `content-visibility: auto` skips off-screen rows, and
+   `contain-intrinsic-size: auto 60px` reserves a plausible measured row height
+   (padding + a 44px avatar) so the scrollbar stays stable until each row is
+   measured. */
+.new-chat-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+
+/* Restore paint for the on-screen row (containment persists even while `auto`
+   shows the element, spec §4.3). Cheap — the row is on screen by definition —
+   and matches the Characters tab rows' contract. */
+.new-chat-row:hover,
+.new-chat-row:focus-within {
+  content-visibility: visible;
+}
+
+/* Skeleton rows while the first load is in flight. */
+.new-chat-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.new-chat-skeleton-avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+}
+
+/* === Welcome wizard ========================================================= */
+
+/* First-run setup steps rendered inside the shared modal panel; step bodies
+   crossfade through Motion's <Presence mode="wait"> (WelcomeWizard). */
+
+.wizard-hero {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
+}
+
+.wizard-hero-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+}
+
+.wizard-hero-intro {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+/* Footer bar: step counter left, navigation right. */
+.wizard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: var(--hairline);
+}
+
+/* === Conversation header =================================================== */
+
+.chat-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--chat-gutter);
+  border-bottom: var(--hairline);
+}
+
+.chat-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.chat-header-spacer {
+  flex: 1 1 auto;
+}
+
+/* Live status pill: a softly pulsing dot announces the running stream. */
+.live-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  /* Duration derived from --motion-scale: at "off" (0.01) it is effectively
+     instant, and design.css also removes the animation outright. */
+  animation: pulse-soft calc(1.6s * var(--motion-scale)) var(--ease-in-out) infinite;
+}
+
+/* Header icon toggle (chat drawer): accent-tinted while pressed. Positioned
+   so the touch block below can grow its hit area without changing its size. */
+.header-action {
+  position: relative;
+  border: var(--hairline);
+  color: var(--fg-muted);
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .header-action:hover {
+    color: var(--fg);
+  }
+}
+
+.header-action[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+/* Error notice: a danger-tinted inline banner under the title row. */
+.chat-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  /* Entrance/exit are Motion (ChatHeader wraps the banner in Presence with
+     riseVariants) so a transient error can animate back out. */
+}
+
+/* === Chat drawer =========================================================== */
+
+/* Slides in over the conversation's right edge (and back out on close);
+   the close X keeps an exit reachable while the (covered) header toggle
+   stays aria-pressed. Hosts the tracker, summaries, and plugin tabs.
+   Position/surface only: the slide itself is Motion (ChatDrawer's
+   drawerVariants). Presence removes the drawer on `closing` so the exit
+   variant plays, then `onClosed` tells the parent to unmount. */
+.drawer {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  bottom: var(--space-2);
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(360px, calc(100% - var(--space-4)));
+  padding: var(--space-3);
+  border: var(--hairline);
+  /* Floating layer: the token scale reserves --radius-xl for these (modals,
+     panels, popovers) over the --radius-lg used by static cards. */
+  border-radius: var(--radius-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-deep);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Tab strip: quiet pills, accent-tinted while selected; scrolls sideways
+   when plugin tabs outgrow the width. */
+.drawer-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.drawer-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  /* Comfortable tap target: the strip's buttons are a 34px row so a tab is
+     as easy to hit as the drawer's icon controls. */
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.drawer-tab:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) {
+  .drawer-tab:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+  }
+}
+
+/* Selected state is the shared-layout indicator (a Motion span in ChatDrawer)
+   rather than a background on the button, so the pill can slide between tabs.
+   The button keeps the accent text so the state never depends on the pill
+   rendering. */
+.drawer-tab.is-active {
+  color: var(--accent);
+}
+
+/* The sliding selected pill, built on the SAME convention as the canonical
+   .segmented-indicator (motion-primitives.css): an absolutely-positioned
+   sibling behind the label, inset:0, pointer-events:none, no fill on the
+   button. Two deliberate deviations, both because the drawer sits on
+   --bg-elev (the drawer's own surface): a --surface-3 fill (the canonical
+   neutral) would be invisible here, so the fill stays an accent tint — the
+   contract's allowed selected/active tint; and the radius is inherited from
+   the tab (a --radius-md control) rather than the canonical's --radius-full,
+   which suits the pill-shaped segmented track, not a tab strip. The elev-1
+   shadow matches the canonical's raised-pill read. */
+.drawer-tab-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  /* Matches the button's own corner while staying a separate paint layer. */
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: var(--elev-1);
+  pointer-events: none;
+}
+
+/* Icon and label ride above the indicator. */
+.drawer-tab svg,
+.drawer-tab-label {
+  position: relative;
+  z-index: 1;
+}
+
+.drawer-tab-label {
+  white-space: nowrap;
+}
+
+/* The active tab's surface; panels manage their own inner layout. */
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The Motion wrapper around the active panel (the tab crossfade). It has to
+   forward the drawer's column layout to the panel it holds, so the panel's
+   own flex:1/min-height:0 still govern the height. */
+.drawer-body-swap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Loaded-but-empty drawer (every tab hidden): the shared empty-state
+   vocabulary (icon + title + hint), tightened for the panel width. */
+.drawer-empty {
+  margin: auto;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-3);
+}
+
+/* Tab management (hide/reorder): the persona picker's menu pattern. */
+.drawer-manage {
+  position: relative;
+  flex: none;
+}
+
+.drawer-manage-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: max-content;
+  min-width: 250px;
+  padding: var(--space-2);
+  border: var(--hairline);
+  /* Floating menu: --radius-xl per the token scale. */
+  border-radius: var(--radius-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-deep);
+}
+
+.drawer-manage-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.drawer-manage-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+}
+
+.drawer-manage-move {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* Shared panel chrome: the head row (icon + title + actions), the loading
+   and error states, and the empty surfaces. */
+.drawer-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.drawer-panel-head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.drawer-panel-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+}
+
+.drawer-panel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.drawer-panel-retry {
+  flex: none;
+  padding: 5px 10px;
+  font-size: var(--fs-caption);
+}
+
+/* === Summaries tab ========================================================= */
+
+/* The summaries tab's content (the drawer shell provides the chrome). */
+.summaries-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The action group (.summaries-actions) is flex: none, so on a narrow
+    drawer it wraps as one unit onto a second line instead of overflowing
+    the header's rounded block. */
+.summaries-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.summaries-head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.summaries-run {
+  flex: none;
+  padding: 5px 10px;
+  font-size: var(--fs-caption);
+}
+
+/* Wraps as a single unit when the header is narrow (see .summaries-head);
+    margin-left:auto keeps it right-aligned on whichever line it lands. */
+.summaries-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  margin-left: auto;
+}
+
+/* Export/Import icon buttons next to "Summarize now" — same height family
+    as the run button, sized by the shared .btn-icon square. */
+.summaries-tool {
+  flex: none;
+}
+
+/* The busy swap replaces the icon with the 16px spinner; keep it centered
+    inside the 32px icon button. */
+.summaries-tool .spinner {
+  margin: 0 auto;
+}
+
+.summaries-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--danger);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.summaries-empty {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-muted);
+}
+
+.summaries-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* One summary row. Its body is a Collapsible, so the card carries no flex
+   gap: the wrapper stays mounted at zero height while shut, and a gap would
+   leave a visible sliver under every collapsed card. The body's own
+   padding-top supplies the spacing while open. */
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.summary-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--fg-muted);
+}
+
+/* The disclosure trigger: the chevron plus the identifying badges, so the
+   whole line opens the card. It takes the row's free space, which pushes the
+   pencil and date to the trailing edge (the header spacer this replaces).
+   Wrapping is allowed inside the button so a narrow drawer degrades exactly
+   as the meta row did before. */
+.summary-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  /* Pull the chevron back onto the card's text edge; the padding is a real
+     hit target and keeps the hover fill clear of the badges. */
+  margin-inline-start: -6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative hover tint; gated so a touch tap cannot leave it stuck. */
+@media (hover: hover) {
+  .summary-toggle:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.summary-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--fg-faint);
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+/* Open state rides the trigger's own aria-expanded, like every other
+   disclosure in the app. */
+.summary-toggle[aria-expanded="true"] .summary-chevron {
+  transform: rotate(180deg);
+}
+
+/* Padding belongs on this child, never on .collapsible-inner: padding on the
+   height:0 clip box would survive as a sliver under a closed card. */
+.summary-body {
+  padding-top: var(--space-1);
+}
+
+.summary-text {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Per-card pencil. Sized by .btn-icon-mini; flex:none keeps it from being
+   squashed when the meta row wraps. */
+.summary-edit-btn {
+  flex: none;
+}
+
+/* Inline editor that replaces .summary-text while a card is open. Inherits
+   the card's surface/text vars so it sits flush inside the card instead of
+   reading as a separate form control. */
+.summary-edit-input {
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  resize: vertical;
+}
+
+.summary-edit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
+}
+
+/* The editor block (textarea over its Save/Cancel row). It is one Motion node
+   inside the card's text/editor Presence, so it needs its own column layout. */
+.summary-edit {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Save/Cancel row under the editor, aligned to the card's trailing edge. */
+.summary-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+/* === Tracker tab =========================================================== */
+
+.tracker-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tracker-run {
+  flex: none;
+  padding: 5px 10px;
+  font-size: var(--fs-caption);
+}
+
+/* Per-chat tracker switch in the panel head. The base .switch (views.css) is
+   38x22; a hair smaller here keeps the head row tight next to the title, and
+   the disabled look (payload still loading) fades it without hiding it. */
+.tracker-chat-switch {
+  width: 34px;
+  height: 20px;
+  margin-left: 2px;
+}
+
+.tracker-chat-switch .switch-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.tracker-chat-switch .switch-input:checked + .switch-track .switch-thumb {
+  transform: translateX(14px);
+}
+
+.tracker-chat-switch .switch-input:disabled + .switch-track {
+  opacity: 0.4;
+}
+
+/* Chat-wide clear: a normal bordered button pinned to the panel's trailing
+   edge, below the frame — kept apart from the per-message trash in the head
+   so the two destructive scopes never read as one control. Always visible
+   once the payload loads, independent of the shown swipe. */
+.tracker-clear {
+  align-self: flex-end;
+  flex: none;
+  padding: 5px 10px;
+  font-size: var(--fs-caption);
+}
+
+/* The rendered template fills the rest of the drawer. */
+.tracker-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.tracker-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.tracker-empty-icon {
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+.tracker-empty-title {
+  font-weight: var(--fw-body-bold);
+}
+
+.tracker-empty-hint {
+  max-width: 260px;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* A tracker hiccup during generation (ok:false) — subtle by design: it
+   never steals attention from the chat the way the shared error banner
+   would. */
+.tracker-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.tracker-notice-dismiss {
+  flex: none;
+  margin-left: auto;
+  padding: 2px;
+}
+
+/* === Plugin tabs =========================================================== */
+
+.drawer-plugin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.drawer-plugin-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+/* Fallback for tabs without a template: the raw panel JSON. */
+.drawer-plugin-json {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow: auto;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* === Prompt inspector ====================================================== */
+
+/* Header budget pill, now a button: same pill skin, but interactive. The
+   .pill class supplies the tint; only the button reset and the hover/focus
+   affordances are added, so it reads exactly as the old static badge did. */
+.prompt-pill {
+  flex: none;
+  /* The .pill skin supplies colour, padding, and type; only the button
+     default border has to be neutralized so the hover can tint it. */
+  border: 1px solid transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  /* Neutral hover — accent tints are reserved for selected/active state — so
+     the pill's edge strengthens instead of filling with accent. */
+  .prompt-pill:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+}
+
+/* The inspector body: a vertical stack inside the modal panel. */
+.prompt-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.prompt-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-7) 0;
+}
+
+/* Header summary: the one-line budget readout over a row of stats. */
+.prompt-preview-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.prompt-preview-line {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+}
+
+.prompt-preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.prompt-stat {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.prompt-stat-value {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+}
+
+.prompt-stat-label {
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+/* Rewrite/summary notices: informational, not alarms. */
+.prompt-preview-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.prompt-preview-notice svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.prompt-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.prompt-copy {
+  flex: none;
+  padding: 5px 10px;
+  font-size: var(--fs-caption);
+}
+
+.prompt-preview-empty {
+  padding: var(--space-5) 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  text-align: center;
+}
+
+/* The assembled messages, in send order. Owns its scroll so a very long
+   prompt never pushes the summary (or the copy button) out of reach. */
+.prompt-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: min(56dvh, 620px);
+  margin: 0;
+  padding: 0 var(--space-1) 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.prompt-msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  /* The per-role tone rides this hairline bar; the default is neutral so an
+     unknown role still gets a marker. */
+  border: var(--hairline);
+  border-inline-start: 3px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.prompt-msg-system {
+  border-inline-start-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.prompt-msg-user {
+  border-inline-start-color: color-mix(in srgb, var(--fg) 35%, transparent);
+}
+
+.prompt-msg-assistant {
+  border-inline-start-color: color-mix(in srgb, var(--success) 60%, transparent);
+}
+
+.prompt-msg-other {
+  border-inline-start-color: color-mix(in srgb, var(--warning) 60%, transparent);
+}
+
+.prompt-msg-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Position in the assembled prompt: a quiet monospace ordinal. */
+.prompt-msg-index {
+  flex: none;
+  min-width: 2ch;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+  text-align: end;
+}
+
+.prompt-msg-role {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.prompt-msg-system .prompt-msg-role {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.prompt-msg-assistant .prompt-msg-role {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.prompt-msg-other .prompt-msg-role {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+}
+
+.prompt-msg-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-msg-tokens {
+  flex: none;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The raw message body: monospace, wrapping, and never a horizontal
+   overflow — long unbroken model output must not break the layout. */
+.prompt-msg-content {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+  line-height: var(--lh-caption);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.prompt-msg-empty {
+  color: var(--fg-faint);
+  font-style: italic;
+}
+
+/* === Transcript ============================================================= */
+
+.msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-4) + var(--space-1));
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* The swipe transition (MessageBubble) translates a row a full width past
+     the edge; clip it instead of growing a horizontal scrollbar —
+     SillyTavern's own #chat does exactly this. */
+  overflow-x: hidden;
+  /* Top/bottom padding are the same step (--space-4), and the bottom matches
+     the composer's top padding below, so the seam across the composer's
+     hairline is symmetric. */
+  padding: var(--space-4) var(--chat-gutter) var(--space-4);
+  /* Chat-text preference (design.css): scale the transcript here so bubbles
+     inherit it; the composers set the same scale independently. */
+  font-size: calc(var(--fs-body) * var(--chat-scale));
+}
+
+.msg-list > .empty-state {
+  margin: auto;
+  padding: var(--space-7) var(--space-4);
+}
+
+/* Transcript loading placeholder (MessageList): shown while the open chat's
+   history is still in flight, so the empty state never flashes first. Echoes
+   the bubble rhythm (a label rail over a bubble) and rides the shared
+   .skeleton delayed fade-in, which keeps a fast load from blinking. */
+.msg-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-4) + var(--space-1));
+  padding: var(--space-3) 0;
+}
+
+.msg-skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.msg-skeleton-bubble {
+  border-radius: var(--radius-lg);
+}
+
+/* "Load earlier messages" control: sits at the top of the windowed
+   transcript, centered, only while older groups are hidden. */
+.load-older {
+  align-self: center;
+  margin-bottom: var(--space-2);
+}
+
+.msg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.msg-user {
+  align-items: flex-end;
+}
+
+.msg-assistant {
+  align-items: flex-start;
+}
+
+.msg-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+/* Bubble avatar: the character's (assistants) or the persona's (user) image,
+   clipped to its circle, with the letter initial as fallback. */
+.msg-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-body-bold);
+}
+
+.msg-assistant .msg-avatar {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.msg-user .msg-avatar {
+  border: var(--hairline);
+  background: var(--bg-subtle);
+  color: var(--accent);
+}
+
+.msg-speaker {
+  color: var(--fg-muted);
+}
+
+/* Timestamp beside the speaker: the same caption size one weight lighter,
+   so the name stays the meta row's anchor. Tabular figures keep the clock
+   from reflowing as the minutes tick over. */
+.msg-time {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption-light);
+  line-height: var(--lh-caption);
+  font-variant-numeric: var(--fvn-tabular);
+  color: var(--fg-muted);
+}
+
+/* Hover-mode timestamps (the list root carries .timestamps-hover): hidden
+   until their message row is hovered or focused — tabbing into a row's
+   actions reveals it too, keeping it reachable for keyboard users. */
+.timestamps-hover .msg-time {
+  display: none;
+}
+
+.timestamps-hover .msg:focus-within .msg-time {
+  display: inline-block;
+}
+
+/* Pointer hover reveals the stamp; gated to real hover devices (the
+   hover:none block below shows it unconditionally on touch instead). */
+@media (hover: hover) {
+  .timestamps-hover .msg:hover .msg-time {
+    display: inline-block;
+  }
+}
+
+/* Ghost chip: the eye-off mark rides the meta row after the timestamp —
+   an inline-flex mark that shifts nothing else (the meta row is its own
+   line), readable as an icon for sighted users and as the aria-label for
+   assistive tech. Only rendered while the memory setting is on and this
+   position is covered. */
+.msg-summarized-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--fg-faint);
+}
+
+.msg-summarized-chip svg {
+  display: block;
+}
+
+/* Entrance is now Motion (MessageBubble's animation controls drive the bubble
+   rise, so a chat switch replays it without a remount and reduced motion
+   collapses it); no CSS keyframe is left here. The avatar itself is static —
+   part of the meta row from the first frame. */
+
+/* Bubbles, precision language: the assistant speaks on the raised surface (a
+   full elevation step over the transcript), the user on the recessed one with
+   an accent hairline. One consistent radius, a real hairline border, and the
+   role distinction carried by surface step + edge rather than a big tint. */
+.msg-bubble {
+  max-width: min(86%, 760px);
+  padding: var(--space-3) var(--space-4);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-3);
+  overflow-wrap: anywhere;
+  /* Disable Inter's calt: it swaps a centered case-sensitive asterisk when "*" precedes a capital letter (rsms/inter#826). */
+  font-feature-settings: "calt" 0;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    box-shadow var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out),
+    transform var(--dur-med) var(--ease-out);
+}
+
+.msg-user .msg-bubble {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-1));
+}
+
+/* Live stream bubble: the focused edge steps up to a brighter accent and a
+   soft halo while tokens flow, so the running surface is unmistakable. */
+.msg-live .msg-bubble {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: var(--ring);
+}
+
+/* Ghost-marked bubbles ("summarized"): while the memory setting is on and
+   a summary row covers the group's seq, the bubble dims a touch —
+   layout, actions and editing all stay untouched, and with the setting
+   off this class never rides the row. */
+.msg-summarized .msg-bubble {
+  opacity: 0.75;
+}
+
+/* Hover decoration is gated behind (hover: hover): on touch a tap leaves a
+   sticky :hover on the last-tapped row, and .msg spans the transcript width,
+   so tapping the empty space beside a bubble would re-hover the whole row.
+   The decoration is the elevation shadow ONLY — no hover transform: animating
+   the bubble's transform puts it on its own compositing layer, and the browser
+   resamples that texture for the length of the transition, so the bubble
+   darkened a touch and its text went soft for a beat on hover-in and again on
+   hover-out. A box-shadow transition repaints without compositing, so the
+   bubble now stays pixel-identical while it fades in. */
+@media (hover: hover) {
+  .msg:hover .msg-bubble {
+    box-shadow: var(--elev-1);
+  }
+}
+
+/* Markdown inside bubbles (plain-mode rendering escapes its input; HTML
+   mode sanitizes instead). */
+.msg-bubble :is(p, pre):not(:last-child) {
+  margin: 0 0 0.5em;
+}
+
+.msg-bubble pre {
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.msg-bubble code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.msg-bubble :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+}
+
+/* Inline emphasis, SillyTavern-style: quoted speech reads warm orange,
+   italics muted gray, underlines soft green — each hue flows from the
+   theme's --msg-* contract (themes.css). The renderer emits its own quote
+   marks, so the browser's built-in ones are suppressed. */
+.msg-bubble q {
+  color: var(--msg-quote);
+}
+
+.msg-bubble q::before,
+.msg-bubble q::after {
+  content: "";
+}
+
+.msg-bubble em,
+.msg-bubble i {
+  color: var(--msg-em);
+}
+
+.msg-bubble u {
+  color: var(--msg-underline);
+}
+
+/* Emphasis inside a quote keeps the quote's hue — no double tint. */
+.msg-bubble q em,
+.msg-bubble q i {
+  color: inherit;
+}
+
+/* An explicit font[color] wrapper wins over every emphasis hue, matching
+   SillyTavern: the message asked for that color. */
+.msg-bubble font[color] :is(em, i, u, q) {
+  color: inherit;
+}
+
+/* Model-authored .custom-* spans arrive with their own inline styles;
+   they inherit the bubble's text styles and are never fought from here. */
+.msg-bubble [class^="custom-"] {
+  color: inherit;
+}
+
+/* Hover action row: a floating toolbar under the bubble's side. Absolutely
+   positioned so it never steals layout; hidden buttons stay focusable so
+   focus-within reveals them for keyboard users. */
+.msg-actions {
+  position: absolute;
+  top: calc(100% - 4px);
+  z-index: var(--z-raised);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  box-shadow: var(--elev-1);
+  opacity: 0;
+  pointer-events: none;
+  /* Fade + lift + a hair of settle. The reveal stays CSS (not Motion) so
+     :focus-within and touch keep their contract without duplicating hover
+     state in React; the buttons get Motion press feedback individually.
+     Opacity takes the fast step so the toolbar is legible the instant it is
+     asked for, while the transform takes the medium step on the spring curve:
+     it drops out from under the bubble and settles with a touch of overshoot,
+     the same tactile character the send button's press carries. */
+  transform: translateY(-5px) scale(0.97);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-med) var(--ease-spring);
+}
+
+/* The reveal grows from the corner that meets the bubble's side, so the pop
+   reads as the row's own surface unfolding rather than a detached box
+   scaling in place. */
+.msg-user .msg-actions {
+  right: 0;
+  transform-origin: top right;
+}
+
+.msg-assistant .msg-actions {
+  left: 0;
+  transform-origin: top left;
+}
+
+/* Same treatment while the inline editor is open (see the inline edit
+   section below for the full picture): its Save/Cancel pair must not be
+   hover-gated — an open editor must not hide its own exit. */
+.msg-editing .msg-actions {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: var(--space-2);
+}
+
+/* Pointer hover reveals the toolbar — gated behind (hover: hover) because on
+   touch a tap leaves a sticky :hover on the last-tapped row (and .msg spans
+   the transcript width), which would pin the toolbar open until the reader
+   tapped outside the transcript. */
+@media (hover: hover) {
+  .msg:hover .msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Keyboard focus is not hover state, so it stays ungated: tabbing to a row
+   (or into the toolbar/editor it holds) reveals the toolbar on every
+   device. */
+.msg:focus-within .msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.btn-icon-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.btn-icon-mini:active {
+  transform: scale(0.97);
+}
+
+.btn-icon-mini:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .btn-icon-mini:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+  }
+
+  .btn-icon-danger:hover {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+}
+
+/* Swipe group: chevrons plus the position counter, set off from the
+   clipboard/fork/regenerate/delete actions by a whisper divider. */
+.swipe-arrows {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--space-1);
+  margin-right: 2px;
+  border-right: var(--hairline);
+}
+
+.swipe-count {
+  min-width: 2.4em;
+  text-align: center;
+  color: var(--fg-faint);
+}
+
+/* Streaming caret: a slim accent bar aligned to the text baseline rather than
+   the block glyph, so it reads as an insertion point. Only opacity animates
+   (compositor-friendly), and it stays inline with the last token — the ::after
+   keeps the markup untouched. */
+.live-cursor::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  /* Derived from --motion-scale so the caret honors the motion preference:
+     under "subtle" (0.6) it still blinks; design.css pins it static under
+     "off", where a 1s loop scaled to 10ms would strobe. */
+  animation: caret-blink calc(1s * var(--motion-scale)) steps(1) infinite;
+}
+
+/* Writing-style caret variants (stores/writing, lib/writing-styles). The base
+   rule above is the "instant" default; these restyle the caret to match the
+   pacing of the other styles. Keyed off the caret's OWN data-writing attribute
+   — not a root attribute — so the Settings preview can render every style side
+   by side regardless of the active selection. All motion stays on
+   opacity/transform and scales with --motion-scale; design.css's motion-"off"
+   block already pins every .live-cursor::after static. */
+.live-cursor[data-writing="smooth"]::after {
+  border-radius: 2px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: caret-breathe calc(1.35s * var(--motion-scale)) ease-in-out infinite;
+}
+
+.live-cursor[data-writing="typewriter"]::after {
+  width: 0.55em;
+  border-radius: 2px;
+  animation: caret-blink calc(1.05s * var(--motion-scale)) steps(1) infinite;
+}
+
+.live-cursor[data-writing="flow"]::after {
+  width: 3px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 65%, transparent);
+  animation: caret-wave calc(0.95s * var(--motion-scale)) ease-in-out infinite;
+}
+
+.btn-stop {
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: var(--fs-badge);
+}
+
+/* === Inline message edit ==================================================== */
+
+/* The edit surface stands in for the bubble it replaces: a composer-shaped
+   card (the composer's focus-ring treatment, gathered on the wrapper) sized
+   to the bubble's max extent, so the swap costs no layout jump. */
+.msg-edit {
+  width: min(86%, 760px);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.msg-edit:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+
+/* Auto-growing textarea, the composer's contract: JS drives the height, CSS
+   caps it near eight rows before the field starts scrolling. */
+.msg-edit-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  max-height: calc(8 * 1.5em + 12px);
+  padding: var(--space-2) 0;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: calc(var(--fs-body) * var(--chat-scale));
+  line-height: 1.5;
+  /* same calt fix */
+  font-feature-settings: "calt" 0;
+  resize: none;
+  overflow-y: auto;
+}
+
+.msg-edit-input:focus {
+  outline: none;
+}
+
+/* Compact Save/Cancel pair for the edit row (the same sizing the live
+   bubble's Stop button takes). */
+.msg-editing .msg-actions .btn {
+  padding: 3px 10px;
+  font-size: var(--fs-badge);
+}
+
+/* === Flat message view ====================================================== */
+
+/* The transcript root carries .msg-view-flat: every avatar and name sits on
+   the left, and a message uses the full transcript width, so the gap from a
+   message to the chat's edges is equal on both sides.
+   - .msg-user joins .msg-assistant at flex-start for the same reason that role
+     already uses it: the user's avatar + name move to the left to match.
+   - .msg becomes a measured, centered column: the 900px cap keeps lines
+     readable on wide monitors, while `margin-inline: auto` splits the leftover
+     space equally, so the gap is identical on both sides at any pane width.
+     Below the cap the column fills the transcript content box, so a message's
+     edges line up with the header/composer and the gap is just the transcript's
+     own padding. `width: 100%` is required — auto cross-axis margins suppress
+     flex `stretch`, so without it the row would shrink-wrap its content.
+   - .msg-bubble drops its min(86%, 760px) cap so it fills that column (this is
+     the AI message widening to the right). It also wins over the ≤760px media
+     query's .msg-bubble rule on specificity, which is intended.
+   - .msg-edit mirrors its bubble's width (the editor is a fixed min(86%, 760px)
+     width, not a max-width) so the swap costs no layout jump — the same reason
+     the existing mobile rule overrides it.
+   - .msg-actions leaves the absolute toolbar at the row's left edge for both
+     roles, since every message now starts there (the existing rules send the
+     user's toolbar to right: 0). */
+.msg-view-flat .msg-user {
+  align-items: flex-start;
+}
+.msg-view-flat .msg {
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto;
+}
+.msg-view-flat .msg-bubble {
+  max-width: 100%;
+}
+.msg-view-flat .msg-edit {
+  width: 100%;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: this moves the toolbar sideways while .msg:focus-within .msg-actions above only toggles opacity/visibility, so no property overlaps */
+.msg-view-flat .msg-actions {
+  left: 0;
+  right: auto;
+  transform-origin: top left;
+}
+
+/* === Transcript view ======================================================== */
+
+/* Reading-first layout: both speakers share one left edge, the message body is
+   unboxed prose, and the avatar sits in a small gutter beside the name. This is
+   deliberately not "flat": flat keeps the bubble surface and only changes
+   alignment. Here the surface is gone, so the text — not the container — is the
+   interface. Header and composer cap at the same measure so the three rows line
+   up on one column. */
+.msg-view-transcript {
+  gap: var(--space-5);
+  padding-top: var(--space-5);
+  padding-bottom: var(--space-5);
+}
+
+.msg-view-transcript .msg {
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.msg-view-transcript .msg-meta {
+  gap: var(--space-2);
+  padding: 0;
+}
+
+.msg-view-transcript .msg-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.msg-view-transcript .msg-speaker {
+  color: var(--fg);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: the transcript override intentionally outranks the base hover-timestamp rule above. */
+.msg-view-transcript .msg-time {
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+}
+
+.msg-view-transcript .msg-bubble,
+.msg-view-transcript .msg-user .msg-bubble {
+  max-width: 100%;
+  margin-left: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  line-height: 1.6;
+  transition: none;
+}
+
+/* With avatars off the name starts at the column edge, so the body must too. */
+.msg-view-transcript .msg-meta:not(:has(.msg-avatar)) ~ .msg-bubble,
+.msg-view-transcript .msg-meta:not(:has(.msg-avatar)) ~ .msg-edit {
+  margin-left: 0;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: the avatar-off sibling rule above is the only higher-specificity rule and targets margin, not width. */
+.msg-view-transcript .msg-edit {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 40px;
+}
+
+/* No hover elevation and no live halo: the text is already the focus. */
+.msg-view-transcript .msg:hover .msg-bubble {
+  box-shadow: none;
+  border-color: transparent;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: the deliberate live reset after the shared bubble rules. */
+.msg-view-transcript .msg-live .msg-bubble {
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.msg-view-transcript .msg-live .live-cursor::after {
+  margin-left: 3px;
+}
+
+/* The toolbar floats at the message's trailing edge instead of underneath it,
+   so revealing it never pushes the next message or changes the row's height. */
+/* biome-ignore lint/style/noDescendingSpecificity: the base focus-within rule above sets opacity/pointer-events; this override only moves the toolbar. */
+.msg-view-transcript .msg-actions,
+.msg-view-transcript .msg-user .msg-actions,
+.msg-view-transcript .msg-assistant .msg-actions {
+  top: -6px;
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+  transform-origin: top right;
+  border-color: transparent;
+  background: var(--bg-elev);
+  box-shadow: var(--elev-1);
+}
+
+.msg-view-transcript .msg:hover .msg-actions,
+.msg-view-transcript .msg:focus-within .msg-actions {
+  transform: translateY(0) scale(1);
+}
+
+/* Keep the conversation header and composer on the transcript's reading
+   column. The transcript root lives inside .chats-main, so :has lets the
+   siblings adopt the same measure without threading a prop through them. */
+.chats-main:has(.msg-view-transcript) .chat-header-row {
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.chats-main:has(.msg-view-transcript) .send-box-inner {
+  max-width: 820px;
+}
+
+/* Phones: keep the shared edge and the avatar gutter, but spend the screen on
+   prose rather than padding. */
+@media (max-width: 760px) {
+  .msg-view-transcript {
+    gap: var(--space-4);
+    padding-top: var(--space-3);
+  }
+
+  .msg-view-transcript .msg-bubble,
+  .msg-view-transcript .msg-user .msg-bubble {
+    margin-left: 36px;
+    max-width: 100%;
+  }
+
+  .msg-view-transcript .msg-edit {
+    width: 100%;
+    margin-left: 36px;
+  }
+
+  .msg-view-transcript .msg-avatar {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* === Bulk delete ============================================================ */
+
+/* Messages at/after the delete boundary: the bubble takes a subtle danger
+   wash and its whisper border warms toward danger, replacing the role
+    tint while the selection is under review. */
+/* biome-ignore lint/style/noDescendingSpecificity: the transcript gutter rule above only sets margin; this danger wash owns border and background. */
+.msg.selected-for-delete .msg-bubble {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elev));
+}
+
+/* Confirm bar: a horizontal card pinned to the transcript's bottom edge —
+   sticky keeps Delete reachable while the selection is scrolled through,
+   and deep elevation carries it above the message content it floats over.
+   The explanatory text grows between the bar's start and its buttons (the
+   danger Delete is a btn btn-danger, Cancel a btn btn-ghost). */
+.del-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-raised);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-3);
+  box-shadow: var(--elev-2);
+  /* Entrance/exit are Motion (MessageList wraps the bar in Presence with
+     riseVariants), so cancelling the boundary can animate it away. */
+}
+
+.del-bar-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* === Composer =============================================================== */
+
+.send-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Top padding matches .msg-list's bottom padding so the seam above and
+     below the composer's hairline is symmetric. */
+  padding: var(--space-4) var(--chat-gutter) var(--space-4);
+  /* Keep the composer above the iOS home-indicator safe area (no-op on
+     devices without an inset). */
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  border-top: var(--hairline);
+}
+
+/* Composer card: the focus ring gathers on the wrapper, not the textarea,
+   so the whole surface reads as the interactive field. Focus, streaming, and
+   disabled are all transitions on this one surface (the textarea itself has
+   no chrome), which keeps the grow/focus change smooth and single-layer. */
+/* biome-ignore lint/style/noDescendingSpecificity: the transcript :has rule above widens only this cap; the base declaration remains the shared default. */
+.send-box-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  /* The field stops growing at 720px and centers in the leftover space, so a
+     wide pane reads a comfortable measure instead of a full-bleed input. Below
+     the cap the card still fills the pane exactly — the max never shrinks a
+     narrow view. `width: 100%` is required because the auto inline margins
+     would otherwise leave the flex item at its shrink-wrapped size. */
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.send-box-inner:focus-within {
+  border-color: var(--accent);
+  background: var(--surface-3);
+  box-shadow: var(--ring);
+}
+
+/* While a generation runs the composer owns the stop control, so its edge
+   warms toward the accent — the same signal the live bubble carries. */
+.send-box-inner.is-streaming {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+}
+
+/* Auto-growing textarea: JS drives the height, CSS caps it near eight rows
+   before the field starts scrolling. One line is 38px (7px padding x2 + the
+   24px line box) to match .send-btn's 38px, so flex-end leaves equal gaps
+   above and below the button; min-height holds that when --chat-scale shrinks
+   the font. */
+.send-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  max-height: calc(8 * 1.5em + 12px);
+  padding: 7px 0;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: calc(var(--fs-body) * var(--chat-scale));
+  line-height: 1.5;
+  /* same calt fix */
+  font-feature-settings: "calt" 0;
+  resize: none;
+  overflow-y: auto;
+}
+
+.send-input:focus {
+  outline: none;
+}
+
+.send-input::placeholder {
+  color: var(--fg-faint);
+}
+
+/* Square send / stop control (one step below the card's radius, precision
+   language): primary while idle, danger-tinted while a generation runs
+   (clicking it aborts the stream). The icon swaps through a Motion Presence,
+   so this surface stays a stable box. */
+.send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-med) var(--ease-spring),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+/* The animated glyph's own box: fills the button so the crossfade stays
+   centered regardless of the two icons' different sizes. */
+.send-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Hover decoration is gated to real hover devices like every other control;
+   the :active press scale below stays for all pointers — it is the send
+   button's deliberate tactile response. */
+@media (hover: hover) {
+  .send-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+    transform: scale(1.06);
+  }
+}
+
+.send-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+/* Stop state: the same box, danger-tinted. The base skin is ungated so the
+   stop affordance reads on touch too; only the hover deepening is gated. */
+.send-btn-stop {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+@media (hover: hover) {
+  .send-btn-stop:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+  }
+}
+
+/* === Responsive ============================================================== */
+
+/* Narrower history rail (old 200–250px column range). */
+@media (max-width: 980px) {
+  .chats-side {
+    width: 250px;
+    min-width: 200px;
+  }
+}
+
+/* Phone-class widths: the history column becomes a slide-over drawer over the
+   full-width conversation, opened by the header's chats toggle. Desktop
+   (≥761px) keeps the width-animated column defined above. */
+@media (max-width: 760px) {
+  .chats-layout {
+    position: relative;
+    flex-direction: row;
+    padding: var(--space-2);
+  }
+
+  .chats-main {
+    width: 100%;
+    /* Tighter gutters on a phone-sized pane. */
+    --chat-gutter: var(--space-3);
+  }
+
+  /* Open conversation: the history column is off-canvas, so the layout
+     gutter is dead space on every edge. Scoped away from
+     .mobile-chats-static, which renders the list as in-flow content and
+     keeps a small gutter. */
+  .chats-layout:not(.mobile-chats-static) {
+    padding: 0;
+  }
+
+  /* Drawer: off-canvas until .mobile-chats-open. Floats at an 8px inset from
+     the pane's edges — the offsets resolve against .chats-layout's padding
+     box. The base .chats-side transition is replaced so the motion is a
+     slide, not a width shrink; the desktop hide/show is neutralized in
+     chrome.css. */
+  .chats-side {
+    position: absolute;
+    inset-block: var(--space-2);
+    inset-inline-start: var(--space-2);
+    /* Above the scrim (same --z-overlay layer), mirroring shell.css's mobile
+       nav drawer. */
+    z-index: calc(var(--z-overlay) + 1);
+    width: min(320px, 85vw);
+    min-width: 0;
+    max-width: 85vw;
+    max-height: none;
+    padding: var(--space-1);
+    /* Full border override: the base rail's border-right/background become the
+       floating panel's all-round chrome. */
+    border: var(--hairline);
+    /* Floating panel: --radius-xl per the token scale. */
+    border-radius: var(--radius-xl);
+    background: var(--bg-elev);
+    box-shadow: var(--shadow-card);
+    transform: translateX(-100%);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      transform var(--dur-collapse) var(--ease-out),
+      opacity var(--dur-med) var(--ease-out),
+      visibility 0ms linear var(--dur-collapse);
+  }
+
+  .chats-layout.mobile-chats-open .chats-side {
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      transform var(--dur-collapse) var(--ease-out),
+      opacity var(--dur-med) var(--ease-out);
+  }
+
+  /* No chat open: ChatHeader (and its chats toggle) is not rendered, so the
+     list cannot be reopened once the drawer is dismissed. Keep it in flow as
+     the pane's content (full height, stacked above the "select a chat" card
+     with its error banner); the slide-over applies only while a conversation
+     is open. */
+  .chats-layout.mobile-chats-static {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .chats-layout.mobile-chats-static .chats-side {
+    position: static;
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Scrim behind the drawer: dims the conversation and closes on tap. Shares
+     the drawer's layer, so DOM order (scrim first) keeps the drawer on top.
+     Rendered only while the slide-over is open. */
+  .mobile-chats-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-overlay);
+    padding: 0;
+    border: none;
+    background: var(--scrim);
+  }
+
+  /* The static (no-chat) layout has no drawer, so any stale open flag must
+     not paint its scrim over the list. */
+  .chats-layout.mobile-chats-static .mobile-chats-scrim {
+    display: none;
+  }
+
+  /* Let the list fill and scroll inside the definite-height drawer. */
+  .chats-side .chats-list {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* The header/composer gutters come from .chats-main's --chat-gutter, so
+     only the row's own layout changes here. */
+  .chat-header-row {
+    flex-wrap: wrap;
+  }
+
+  .msg-bubble {
+    max-width: 94%;
+  }
+
+  .msg-edit {
+    width: 94%;
+  }
+
+  .msg-list {
+    padding: var(--space-3) var(--chat-gutter) var(--space-4);
+  }
+
+  /* Prompt inspector: the modal is a full-screen sheet at this width, so the
+     message list drops its own scroll cap and the sheet scrolls instead — no
+     nested scroll region on a small touch screen. */
+  .prompt-preview-list {
+    max-height: none;
+  }
+
+  .prompt-msg {
+    padding: var(--space-2);
+  }
+}
+
+/* Touch devices have no hover — keep the hover-gated chat controls reachable.
+   (The global :focus-within rules already cover keyboard focus; this makes the
+   touch path explicit and reveals hover-mode timestamps.) */
+@media (hover: none) {
+  .msg:focus-within .msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .chat-item-delete {
+    opacity: 1;
+  }
+
+  /* Header actions are 32px .btn-icon squares on pointer devices; grow the
+     touch hit area via an invisible overlay so the visual size is unchanged.
+     The inset is 2px (a 36px target) rather than 4px: adjacent actions sit
+     only 8px apart, so a 4px inset would make neighbouring hit areas touch
+     exactly and let a tap in the gap resolve to whichever ::after paints on
+     top. At 2px each target keeps a 4px gutter, so every tap is unambiguous;
+     36px is still a comfortable touch floor. */
+  .header-action::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+  }
+
+  .timestamps-hover .msg-time {
+    display: block;
+  }
+
+  /* Tapping a message focuses it to reveal the toolbar; suppress the tap's
+     focus ring without touching the keyboard :focus-visible ring (base.css). */
+  .msg:focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+/* Message action toolbar: its controls are 32px squares at a 2px gap — below
+   the 44px touch-target floor, and sitting right beside the destructive Delete.
+   On coarse pointers grow each control to 44px and open the row's gaps so
+   adjacent hit areas never overlap. The toolbar floats over the transcript, so
+   the extra size costs no layout. Scoped to the toolbar: .btn-icon-mini is
+   reused by the summaries panel, where the compact size stays. */
+@media (pointer: coarse) {
+  .msg-actions {
+    gap: 6px;
+    padding: 5px;
+  }
+
+  .msg-actions .btn-icon-mini {
+    width: 44px;
+    height: 44px;
+  }
+
+  .swipe-arrows {
+    gap: 4px;
+    margin-right: 4px;
+  }
+}
+
+/* Phones: the toolbar can carry ten controls plus the swipe counter, and at
+   the 44px touch size a fully populated strip is wider than a phone row
+   (≈440px against ≈336px at 360px wide). It must never wrap — a second row
+   doubles the floating toolbar's height and covers the message below — so the
+   strip stays one line: the controls keep a 32px base and give up width
+   proportionally when the row demands it, with a fixed 32px height whatever
+   the action count. A window this narrow on a fine pointer already uses the
+   32px base, so the same rule serves both. */
+@media (max-width: 760px) {
+  .msg-actions {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .msg-actions .btn-icon-mini {
+    flex: 0 1 auto;
+    width: 32px;
+    /* 24px is the WCAG 2.5.8 target floor; the full set still clears it on a
+       320px phone once the swipe group's divider padding is trimmed. */
+    min-width: 24px;
+    height: 32px;
+  }
+
+  .swipe-arrows {
+    min-width: 0;
+    gap: 2px;
+    margin-right: 0;
+    padding-right: 2px;
+  }
+}
+
+/* iOS Safari auto-zooms the viewport when focusing any form control under
+   16px, breaking the layout mid-typing. The chat-text preset can push the
+   composer and inline editor below that floor (as low as ~10.5px), so narrow
+   viewports pin them to at least 16px; wider viewports keep the preference. */
+@media (max-width: 640px) {
+  .send-input,
+  .msg-edit-input {
+    font-size: max(1rem, 16px);
+  }
+}

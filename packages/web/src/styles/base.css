@@ -1,0 +1,966 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * SuvojTavern base styles — reset, typography, and the shared component
+ * vocabulary. Consumes the token layer (tokens.css) and theme colors
+ * (themes.css); motion utilities live in motion.css.
+ *
+ * Class names are a cross-agent contract (phases C2-C4 build on these):
+ *   shell:   .app-shell .sidebar .app-main .row .stack .muted
+ *   nav:     .sidebar-brand .sidebar-nav .sidebar-title
+ *            .nav-link .nav-icon .nav-label .theme-option .theme-kind
+ *   surface: .card .panel .panel-hero .card-hover .divider .empty-state
+ *   text:    .display-hero .display-secondary .section-heading
+ *            .sub-heading .card-title .body-large .caption .badge-text
+ *   action:  .btn .btn-primary .btn-ghost .btn-icon .btn-danger
+ *            .badge .pill .chip
+ *   forms:   .field .field-label .field-hint .field-error
+ *            .input .textarea .select
+ *   state:   .skeleton .spinner .tooltip(data-tip) .modal-overlay .modal-panel
+ *            .modal-wide
+ *
+ * --- INTERACTION CONTRACT (phases C2-C4 and later batches: follow this) -----
+ * The rules below are the shared reference for every interactive surface; new
+ * component styles (feature sheets included) must match them rather than invent
+ * their own. Terse version of DESIGN.md §8:
+ *   a. Hover is gated: every `:hover` decoration lives inside
+ *      `@media (hover: hover)` so a tap on a touch device cannot leave a
+ *      sticky hover on the last-pressed control.
+ *   b. Tint vocabulary: neutral hover = var(--surface-hover); active/pressed
+ *      fill = var(--surface-active). Accent tints are reserved for
+ *      selected/active state (aria-current, aria-pressed, :checked) — never a
+ *      plain hover.
+ *   c. Press feedback is a transform, not a color shift: `:active` scales in
+ *      the 0.97–0.98 family (e.g. .btn 0.98, .chip 0.97). Never animate
+ *      layout-affecting properties.
+ *   d. Focus is the existing `:focus-visible` ring (the block below): 1px
+ *      outline in var(--focus) + var(--ring) shadow. Do not add per-component
+ *      focus styles.
+ *   e. Surfaces, borders, radii and spacing come from tokens only —
+ *      var(--hairline), var(--radius-*), var(--surface-*), var(--space-*) —
+ *      never literal colors or sizes. Colors are always derived from theme
+ *      vars with color-mix; no hardcoded colors anywhere.
+ */
+
+/* --- Reset & base typography -------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html {
+  /* Interface-scale preference (design.css): scales every rem-based type
+     token at once. Spacing/radius tokens are px, so layout gutters do not
+     move — intentional. */
+  font-size: calc(100% * var(--ui-scale));
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+body {
+  /* --bg stays a concrete hex (contrast math in stores/design.ts); the
+     optional --bg-image is the gradient themes' decorative wash. Kept as a
+     plain (non-fixed, non-repeating) background: .app-shell is 100dvh and
+     .app-main owns scrolling, so the body canvas already covers the viewport. */
+  background-color: var(--bg);
+  background-image: var(--bg-image);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Headings carry the display typographic features and per-size tracking
+   from DESIGN.md §3; app-side sizes step down from the marketing scale. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-feature-settings: "lnum", "locl";
+  font-weight: 700;
+  line-height: 1.3;
+}
+h1 {
+  font-size: var(--fs-sub-heading);
+  line-height: var(--lh-sub-heading);
+  letter-spacing: var(--ls-sub-heading);
+}
+h2 {
+  font-size: var(--fs-card-title);
+  line-height: var(--lh-card-title);
+  letter-spacing: var(--ls-card-title);
+}
+h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: var(--ls-body-large);
+}
+h4 {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+h5 {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+h6 {
+  font-size: var(--fs-badge);
+  font-weight: 600;
+  letter-spacing: var(--ls-badge);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+/* Hover decoration is gated behind (hover: hover) so a tap on a touch device
+   cannot leave a sticky underline on the last-tapped link. */
+@media (hover: hover) {
+  a:hover {
+    text-decoration: underline;
+  }
+}
+
+/* Internal-route link rendered as a <button> (components/ui/AppLink.tsx): no
+   href, so the browser paints no bottom-left URL preview on hover. Resets the
+   button UA chrome and inherits the prose text flow so it reads exactly like
+   the `a` accent link above. */
+.inline-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+}
+/* Hover decoration is gated behind (hover: hover) so a tap on a touch device
+   cannot leave a sticky underline on the last-tapped link. */
+@media (hover: hover) {
+  .inline-link:hover {
+    text-decoration: underline;
+  }
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* --- Focus system (DESIGN.md §8) ---------------------------------------- */
+
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus);
+  /* 1px (not 2px): the ring hugs the control's own hairline instead of
+     floating away from it. */
+  outline-offset: 1px;
+  box-shadow: var(--ring);
+}
+
+/* --- Typography helpers (DESIGN.md §3 roles) ----------------------------- */
+
+.display-hero {
+  font-size: var(--fs-display-hero);
+  font-weight: var(--fw-display-hero);
+  line-height: var(--lh-display-hero);
+  letter-spacing: var(--ls-display-hero);
+  font-feature-settings: "lnum", "locl";
+}
+
+.display-secondary {
+  font-size: var(--fs-display-secondary);
+  font-weight: var(--fw-display-secondary);
+  line-height: var(--lh-display-secondary);
+  letter-spacing: var(--ls-display-secondary);
+  font-feature-settings: "lnum", "locl";
+}
+
+.section-heading {
+  font-size: var(--fs-section-heading);
+  font-weight: var(--fw-section-heading);
+  line-height: var(--lh-section-heading);
+  letter-spacing: var(--ls-section-heading);
+  font-feature-settings: "lnum", "locl";
+}
+
+.sub-heading {
+  font-size: var(--fs-sub-heading);
+  font-weight: var(--fw-sub-heading);
+  line-height: var(--lh-sub-heading);
+  letter-spacing: var(--ls-sub-heading);
+}
+
+.card-title {
+  font-size: var(--fs-card-title);
+  font-weight: var(--fw-card-title);
+  line-height: var(--lh-card-title);
+  letter-spacing: var(--ls-card-title);
+}
+
+.body-large {
+  font-size: var(--fs-body-large);
+  font-weight: var(--fw-body-large);
+  line-height: var(--lh-body-large);
+  letter-spacing: var(--ls-body-large);
+}
+
+.caption {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+}
+
+.badge-text {
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+/* --- App shell: sidebar + main -------------------------------------------- */
+
+/* Flex shell (not grid) so the sidebar and the main pane share the row with
+   the rail sizing itself independently of the content. */
+.app-shell {
+  display: flex;
+  height: 100dvh;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The vertical rail: a permanent icon column (labels are hidden and surface
+   as tooltips instead — see shell.css). The "top" layout and the mobile
+   drawer override the width and re-show the labels. */
+.app-shell > .sidebar {
+  flex: none;
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-2);
+  background: var(--bg-subtle);
+  border-right: var(--hairline);
+}
+
+/* Sidebar on the right instead of the left. */
+.app-shell.sidebar-right {
+  flex-direction: row-reverse;
+}
+.app-shell.sidebar-right > .sidebar {
+  border-right: none;
+  border-left: var(--hairline);
+}
+
+/* --- Sidebar vocabulary ---------------------------------------------------- */
+
+.sidebar-brand {
+  padding: var(--space-1) var(--space-2);
+}
+
+.sidebar-title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  letter-spacing: var(--ls-body-large);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--fs-nav);
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  /* Button reset: the nav row is a <button> now (Sidebar.tsx) — no href, so no
+     browser URL preview, but every UA button default has to come off. The
+     vertical rails' flex-column parents stretch it to the full row width. */
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out);
+}
+/* Hover tint is gated to real hover devices: on touch a tap would otherwise
+   leave a sticky :hover on the last-tapped row. */
+@media (hover: hover) {
+  .nav-link:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+    text-decoration: none;
+  }
+}
+/* Active route (aria-current="page", set by Sidebar.tsx). */
+.nav-link[aria-current="page"] {
+  background: var(--surface-active);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nav-label {
+  /* Allow the label to shrink and ellipsize in the states that show it (the
+     top bar and the mobile drawer); the cap is a no-op in the icon rail,
+     where the whole label is display:none. */
+  min-width: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.theme-option {
+  padding: 4px 10px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  border-radius: var(--radius-sm);
+  touch-action: manipulation;
+}
+
+.theme-kind {
+  min-width: 4ch;
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+  text-transform: capitalize;
+}
+
+/* --- Layout primitives ------------------------------------------------------ */
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Defined after .stack so the tighter nav rhythm wins over the stack gap
+   (the sidebar nav element carries both classes). */
+.sidebar-nav {
+  gap: 2px;
+}
+
+.divider {
+  border: none;
+  border-top: var(--hairline);
+  margin: var(--space-3) 0;
+}
+
+/* --- Surfaces (precision) -------------------------------------------------- */
+
+.card,
+.panel {
+  background: var(--surface-3);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--elev-1);
+}
+
+/* Featured/hero panels: larger radius, one elevation step up. */
+.panel-hero {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elev-2);
+}
+
+/* Hover state reads as "this surface is interactive": the hairline strengthens,
+   the surface rises 1px, and it steps up one elevation level. The old 3px lift
+   + deep-shadow crossfade was atmospheric; precision wants a restrained,
+   unmistakably stateful response. Interpolating box-shadow is cheap now that
+   both steps are two short layers. */
+.card-hover {
+  /* Positioned so card-local overlays (e.g. lorebooks.css .lore-card-pulse
+     ::before) can anchor to the card box. */
+  position: relative;
+  transition:
+    transform var(--dur-med) var(--ease-out),
+    background-color var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out),
+    box-shadow var(--dur-med) var(--ease-out);
+}
+/* Hover decoration is gated behind (hover: hover) so it does not stick after a
+   tap on touch devices. */
+@media (hover: hover) {
+  .card-hover:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    box-shadow: var(--elev-2);
+  }
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+}
+/* Icon in a hairline disc: the precision counterweight to a big empty canvas,
+   so an empty view still reads as composed rather than broken. */
+.empty-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: var(--surface-1);
+  color: var(--fg-faint);
+}
+.empty-state-title {
+  font-size: var(--fs-body-large);
+  font-weight: var(--fw-body-large);
+  letter-spacing: var(--ls-body-large);
+}
+.empty-state-hint {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-muted);
+  /* The sentence ends in a link followed by a period; naive wrapping can drop
+     that period onto its own centered line. `pretty` avoids the orphan. */
+  text-wrap: pretty;
+}
+
+/* Error counterpart to .empty-state: a failure should be visually distinct
+   from "nothing here yet", so it carries a danger-tinted hairline box while
+   keeping the same centered rhythm. */
+.error-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface-2));
+}
+.error-state-title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--danger);
+}
+.error-state-hint {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-muted);
+}
+
+/* --- Buttons (precision) ------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  /* A visible hairline (not transparent) is the precision default: every
+     control has an edge, and hover/active strengthen that edge rather than
+     adding a diffuse shadow. */
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  color: var(--fg);
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
+  line-height: var(--lh-nav);
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+/* The transform feedback is gated behind (hover: hover) for the hover state;
+   :active stays for everyone as the press response. */
+@media (hover: hover) {
+  .btn:hover {
+    background: color-mix(in srgb, var(--surface-3) 94%, var(--fg));
+    border-color: var(--border-strong);
+  }
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  color: var(--fg-faint);
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+@media (hover: hover) {
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: transparent;
+  }
+}
+.btn-primary:disabled {
+  background: color-mix(in srgb, var(--accent) 45%, var(--bg));
+  color: var(--fg-faint);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+@media (hover: hover) {
+  .btn-ghost:hover {
+    background: var(--surface-hover);
+    border-color: transparent;
+    text-decoration: none;
+    transform: none;
+  }
+}
+
+/* Square controls: the small radius keeps an icon button from reading as a
+   circle while still matching the corner language. */
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-danger {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+@media (hover: hover) {
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  }
+}
+
+/* --- Badges, pills, chips (precision) ---------------------------------------- */
+
+.badge,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  /* Small radius, not a full pill: crisp metadata tags are part of the
+     precision language. */
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.badge-success {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+.badge-warning {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+.badge-danger {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+/* Small interactive filter pill. Selected state: aria-pressed="true". */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .chip:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+    color: var(--fg);
+  }
+}
+.chip:active {
+  transform: scale(0.97);
+}
+.chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+}
+
+/* Opt-in tabular figures for numeric UI (steppers, counters, keys, timestamps)
+   so changing digits never reflow. Feature styles can also call the token. */
+.tnum {
+  font-variant-numeric: var(--fvn-tabular);
+}
+
+/* --- Forms (DESIGN.md §4) ---------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.field-label {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg);
+}
+.field-hint {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-muted);
+}
+.field-error {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--danger);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  /* 8px vertical padding + 1px borders keeps the control ~36px tall and
+     consistent across text inputs and the native select. */
+  padding: 8px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* Number inputs are numeric UI: fixed-width digits stop the caret and the
+   surrounding row from shifting as the value changes. */
+.input[type="number"] {
+  font-variant-numeric: var(--fvn-tabular);
+}
+
+/* iOS Safari auto-zooms the viewport when focusing any form control under
+   16px, breaking the layout mid-typing. The small interface-font presets can
+   push these below that floor (--fs-body is 1rem scaled by --ui-scale), so
+   narrow viewports pin them to at least 16px; desktop keeps the preference. */
+@media (max-width: 640px) {
+  .input,
+  .textarea,
+  .select {
+    font-size: max(1rem, 16px);
+  }
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--fg-faint);
+}
+
+.select {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: var(--ring);
+}
+
+/* --- Loading & tooltip ---------------------------------------------------------------- */
+
+/* Shimmer skeleton; keyframes live in motion.css. The delayed fade-in
+   (--dur-skeleton-delay, backwards fill) keeps quick loads from flashing a
+   skeleton at all: local fetches resolve before the delay elapses, so the
+   placeholder never becomes visible. The sweep duration tracks
+   --motion-scale like the other decorative loops (.live-dot, the streaming
+   caret), and design.css removes it outright at motion=off. Motion is
+   disabled under prefers-reduced-motion (the global kill at the end of this
+   file). */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-active);
+  animation: fade-in var(--dur-med) var(--ease-out) var(--dur-skeleton-delay) backwards;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--fg) 8%, transparent),
+    transparent
+  );
+  /* Decorative loop, so the 1.2s reference duration is scaled by
+     --motion-scale: "subtle" quickens the sweep and "off" collapses it (and
+     design.css removes it), matching .live-dot / the streaming caret. */
+  animation: shimmer calc(1.2s * var(--motion-scale)) infinite;
+}
+
+/* Progress spinner: a load affordance, not decoration. It keeps a FIXED 700ms
+   cycle — deliberately NOT scaled by --motion-scale — so it keeps turning
+   when motion is "off" (design.css leaves spinners out of its animation kill).
+   Do not "fix" this to match the shimmer above. */
+.spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: var(--radius-full);
+  border: 2px solid color-mix(in srgb, var(--fg) 15%, transparent);
+  border-top-color: var(--accent);
+  animation: spin 700ms linear infinite;
+}
+
+/* Global tooltip: lib/tooltip.ts mounts one element with this class on
+   <body> and positions it in fixed viewport coordinates — above its anchor
+   when there is room (flipping below otherwise), clamped to the window, or
+   beside the anchor when it hugs a viewport edge. Opt in from any element
+   with `data-tip="text"`. */
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-tooltip);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility var(--dur-fast) var(--ease-out);
+}
+.tooltip[data-show] {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* --- Modal ----------------------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  /* Scroll if a panel ever outgrows the viewport, so its top stays
+     reachable (paired with the panel's margin: auto safe-centering). */
+  overflow-y: auto;
+  padding: var(--space-4);
+  /* Slightly softer than the raw --scrim so the panel reads as the focus
+     while the page behind stays legible. */
+  background: color-mix(in srgb, var(--scrim) 90%, transparent);
+  backdrop-filter: blur(4px);
+  /* Entrance/exit are driven by Motion (components/ui/Modal.tsx), not CSS:
+     the panel and overlay carry `hidden`/`visible`/`exit` variants so the
+     close can actually animate before the element unmounts. */
+}
+
+/* Pairs with .card for surface looks; adds size, scroll, and one elevation
+   step over a card. margin: auto is the grid safe-centering half of the
+   pattern below: a panel taller than the overlay aligns to the start instead
+   of having its top clipped out of view by place-items: center. */
+.modal-panel {
+  width: min(720px, 100%);
+  max-height: 85dvh;
+  margin: auto;
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elev-2);
+}
+
+/* Wide variant for large editors (the preset pipeline). */
+.modal-wide {
+  width: min(960px, 100%);
+}
+
+/* XL variant for big visual editors (the tracker schema editor): a
+   near-fullscreen panel of a fixed height — the header stays pinned and
+   only the body (.modal-body below) scrolls. The stack gap is dropped:
+   the header's own padding + rule separates it from the body instead. */
+.modal-xl {
+  width: min(1160px, 100%);
+  height: min(880px, 92dvh);
+  gap: 0;
+  overflow: hidden;
+}
+
+.modal-xl > .modal-head {
+  flex: none;
+  padding-bottom: var(--space-4);
+  border-bottom: var(--hairline);
+}
+
+.modal-xl > .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-1) 0 0;
+}
+
+/* --- Mobile modals ----------------------------------------------------------- */
+/* Phones get full-screen sheets: no wasted gutter, no rounded corners, and
+   the panel clears the notch / home indicator via safe-area insets. */
+@media (max-width: 760px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    padding-top: max(var(--space-4), env(safe-area-inset-top, 0px));
+    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal-wide,
+  .modal-xl {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+/* --- Scrollbars -------------------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- Reduced motion: global kill ------------------------------------------------------------- */
+/* The !important flags are deliberate: this is the standard WCAG 2.3.3
+   pattern and must override every component/utility animation, whatever
+   its specificity. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 global motion kill */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 global motion kill */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 global motion kill */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 global motion kill */
+    transition-delay: 0ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 global motion kill */
+    animation-delay: 0ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: WCAG 2.3.3 global motion kill */
+    scroll-behavior: auto !important;
+  }
+}

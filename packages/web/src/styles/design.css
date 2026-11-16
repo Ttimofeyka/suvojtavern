@@ -1,0 +1,251 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * SuvojTavern design preferences — the user-facing appearance knobs owned by
+ * stores/design.ts and mirrored onto <html> as data attributes:
+ *
+ *   data-motion="off|subtle|full"            motion intensity (default "full")
+ *   data-surfaces="flat|elevated|glass|aero"  surface style    (default "elevated")
+ *   data-blur="light|medium|heavy"            glass/aero backdrop blur (default "medium")
+ *   data-translucency="sheer|balanced|dense"  glass/aero chrome opacity (default "balanced")
+ *
+ * The accent-color preference and the two continuous font scales are applied
+ * as inline custom properties by the store (the accent needs JS to compute
+ * hover/foreground variants; the font knobs accept any percent, so neither can
+ * be expressed as a fixed attribute rule), so they have no rules here. These
+ * rules rely on the `:root[data-*]` specificity, not on import order: shell.css,
+ * chat.css, views.css, and memory.css are all loaded after this file (see
+ * src/index.tsx) and can win specificity ties, so each rule below is scoped
+ * tightly enough to override its target on merit. The motion/surface defaults
+ * ("full", "elevated") deliberately have no rules — the existing look is the
+ * fallback. The blur/translucency presets restate their "medium"/"balanced"
+ * token values so switching back from another preset cannot leave a stale
+ * value in place.
+ *
+ * House rules, per DESIGN.md: zero hardcoded colors — derive everything from
+ * theme vars with color-mix; animate transform/opacity only.
+ */
+
+/* --- Motion intensity ---------------------------------------------------- */
+
+/* "subtle" keeps the same choreography, just quicker. */
+:root[data-motion="subtle"] {
+  --motion-scale: 0.6;
+}
+
+/* "off" collapses every token-derived duration to near-zero. It is 0.01 (not
+   0) so animationend/transitionend events still fire — the chat drawer's
+   close path and other JS listeners depend on them. */
+:root[data-motion="off"] {
+  --motion-scale: 0.01;
+}
+
+/* Purely decorative infinite loops are switched off outright rather than
+   sped up: at a 0.01 scale they would otherwise strobe at ~10,000 fps,
+   which is both wasteful and visibly worse than no motion. The streaming
+   caret (.live-cursor::after) is one of these: at 0.01 its 1s loop becomes
+   a 10ms cycle, i.e. a ~100 Hz flicker, so "off" pins it static. The
+   spinner is deliberately NOT listed: it conveys a loading state (not
+   decoration), it uses a fixed 700ms duration that --motion-scale does not
+   touch, and it is the only progress affordance on slow requests — so it
+   keeps turning. */
+:root[data-motion="off"] .skeleton::after,
+:root[data-motion="off"] .live-dot,
+:root[data-motion="off"] .live-cursor::after,
+:root[data-motion="off"] .memory-demo * {
+  animation: none;
+}
+
+/* The card hover lift is motion, so "off" pins the surface flat. */
+:root[data-motion="off"] .card-hover:hover {
+  transform: none;
+}
+
+/* The CSS stagger utilities (motion.css) add
+   `animation-delay: calc(var(--stagger-i, 0) * 60ms)`, and that delay is
+   deliberately NOT scaled by --motion-scale (it is sequencing, not motion).
+   With `backwards` fill the element would sit at opacity 0 for the whole
+   delay, so "off" zeroes it as well as collapsing the duration; the Motion
+   primitive path (lib/motion.ts) already drops its stagger under reduce. */
+:root[data-motion="off"] .anim-rise,
+:root[data-motion="off"] .anim-scale {
+  animation-delay: 0ms;
+}
+
+/* --- Surface blur & translucency ---------------------------------------- */
+
+/* The two intensity knobs shared by the glass and aero surface styles. They
+   only feed --surface-blur/--surface-alpha, so with flat/elevated surfaces
+   the attributes are inert. Like the other presets, the defaults restate
+   their tokens so switching back from another preset cannot leave a stale
+   value in place. :root[data-*] (0,2,0) outranks the bare :root token default
+   (0,1,0) — :root is itself a pseudo-class. */
+:root[data-blur="light"] {
+  --surface-blur: 8px;
+}
+:root[data-blur="medium"] {
+  --surface-blur: 14px;
+}
+:root[data-blur="heavy"] {
+  --surface-blur: 24px;
+}
+
+:root[data-translucency="sheer"] {
+  --surface-alpha: 55%;
+}
+:root[data-translucency="balanced"] {
+  --surface-alpha: 74%;
+}
+:root[data-translucency="dense"] {
+  --surface-alpha: 90%;
+}
+
+/* --- Surface style: flat ------------------------------------------------- */
+
+/* Flat drops every elevation shadow (the --elev-* tokens alias these, so they
+   go too) and replaces the hover lift with a slightly stronger hairline so
+   cards still read as separate surfaces. */
+:root[data-surfaces="flat"] {
+  --shadow-card: none;
+  --shadow-deep: none;
+  --border: color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+:root[data-surfaces="flat"] .card-hover:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* --- Surface style: glass ------------------------------------------------ */
+
+/* Glass frosts the app chrome only — the sidebar, the conversation header,
+   and the chat drawer. Content cards (.card/.panel) stay opaque so long-form
+   text keeps its contrast, and that includes the modal panel (a `.card`,
+   often a long-form editor): frosting it would trade text contrast for a
+   purely decorative effect. The translucent background lets the page behind
+   the chrome show through; the inset highlight supplies the 1px top edge that
+   a real pane of glass has.
+   The chat header frosts the canvas (--bg) rather than --bg-elev: it is a
+   stacked sibling atop the full-bleed conversation pane (chat.css), so
+   frosting the canvas keeps it flush with the pane instead of reading as a
+   lighter band. */
+:root[data-surfaces="glass"] .chat-header {
+  background: color-mix(in srgb, var(--bg) var(--surface-alpha), transparent);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+:root[data-surfaces="glass"] .drawer {
+  background: color-mix(in srgb, var(--bg-elev) var(--surface-alpha), transparent);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+/* The glass sidebar paints its top highlight as a background layer rather than
+   a box-shadow. shell.css gives the mobile off-canvas drawer its soft edge
+   through `box-shadow: var(--drawer-shadow)` at specificity (0,2,0); a
+   box-shadow here at (0,3,0) would outrank and silently drop that edge in
+   glass mode. A background layer can never collide with box-shadow, so the
+   drawer keeps its --shadow-deep and the pane keeps its 1px top edge. */
+:root[data-surfaces="glass"] .sidebar {
+  background:
+    linear-gradient(color-mix(in srgb, var(--fg) 6%, transparent), transparent 1px),
+    color-mix(in srgb, var(--bg-elev) var(--surface-alpha), transparent);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+}
+
+/* --- Surface style: aero ------------------------------------------------ */
+
+/* Aero is the heavier, "real glass" cousin of glass: same chrome-only scope
+   (the sidebar, conversation header, and chat drawer) so content
+   cards/modals keep opaque, readable surfaces — a deliberate contrast
+   decision, not an oversight. On top of glass it adds a stronger backdrop
+   (saturation alongside blur), a specular top sheen + 1px inner highlight,
+   and a crisper outer hairline so the panes read as physical glass rather
+   than a tinted scrim. The header frosts the canvas (--bg) like its glass
+   counterpart, keeping it flush with the full-bleed conversation pane. */
+:root[data-surfaces="aero"] .chat-header {
+  background:
+    linear-gradient(color-mix(in srgb, var(--fg) 8%, transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, var(--fg) 11%, transparent), transparent 1px),
+    color-mix(in srgb, var(--bg) var(--surface-alpha), transparent);
+  backdrop-filter: blur(var(--surface-blur)) saturate(1.45);
+  -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(1.45);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
+:root[data-surfaces="aero"] .drawer {
+  background:
+    linear-gradient(color-mix(in srgb, var(--fg) 8%, transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, var(--fg) 11%, transparent), transparent 1px),
+    color-mix(in srgb, var(--bg-elev) var(--surface-alpha), transparent);
+  backdrop-filter: blur(var(--surface-blur)) saturate(1.45);
+  -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(1.45);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
+/* Same specificity rationale as the glass sidebar: shell.css gives the mobile
+   off-canvas drawer its soft edge through `box-shadow: var(--drawer-shadow)`
+   at specificity (0,2,0); a box-shadow here at (0,3,0) would outrank and
+   silently drop that edge. The specular sheen and the 1px inner top highlight
+   therefore ride as background layers instead (the sidebar already owns its
+   outer hairline via its shell border). */
+:root[data-surfaces="aero"] .sidebar {
+  background:
+    linear-gradient(color-mix(in srgb, var(--fg) 11%, transparent), transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--fg) 8%, transparent), transparent 60%),
+    color-mix(in srgb, var(--bg-elev) var(--surface-alpha), transparent);
+  backdrop-filter: blur(var(--surface-blur)) saturate(1.45);
+  -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(1.45);
+}
+
+/* Users who ask the OS to reduce transparency get the opaque surfaces back,
+   exactly as they do under glass: the translucent layer (and aero's extra
+   sheen) is dropped and only the 1px inner top highlight survives, which
+   reads fine on an opaque background. */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-surfaces="glass"] .sidebar {
+    background:
+      linear-gradient(color-mix(in srgb, var(--fg) 6%, transparent), transparent 1px),
+      var(--bg-subtle);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  :root[data-surfaces="glass"] .chat-header {
+    background: var(--bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  :root[data-surfaces="glass"] .drawer {
+    background: var(--bg-elev);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  :root[data-surfaces="aero"] .sidebar {
+    background:
+      linear-gradient(color-mix(in srgb, var(--fg) 11%, transparent), transparent 1px),
+      var(--bg-subtle);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  :root[data-surfaces="aero"] .chat-header {
+    background: var(--bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  :root[data-surfaces="aero"] .drawer {
+    background: var(--bg-elev);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

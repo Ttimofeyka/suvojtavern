@@ -1,0 +1,367 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * SuvojTavern theme system — nine palettes on one variable contract.
+ *
+ * Themes are selected via `data-theme` on <html>. index.tsx applies
+ * "tavern" before first paint; the settings store (stores/theme.ts)
+ * overrides it later. Theme ids, kinds, and the default are frozen:
+ * tavern (dark, default), midnight (dark), coffee (dark), aurora (dark),
+ * nebula (dark, gradient), daylight (light), paper (light), mist (light),
+ * lagoon (light, gradient) — five dark, four light.
+ *
+ * Tavern is the reading-first default: warm charcoal, soft off-white prose,
+ * amber quoted speech, and almost no decorative chrome. The transcript is
+ * meant to read like a page, not a stack of cards.
+ *
+ * Precision retune: every palette now leans on layered near-black (or
+ * near-white) surfaces + 1px hairlines for structure, with flat, tight
+ * elevation instead of the old diffuse multi-layer stacks. Dark themes are
+ * cooler and more neutral; accents are each theme's OWN hue, refined but never
+ * replaced by a generic purple. WCAG-AA hierarchy is preserved: body text
+ * >= 4.5:1, muted >= 4.5:1 on every opaque surface; accents stay readable as
+ * text.
+ *
+ * The gradient themes paint their wash through `--bg-image` (base.css), NOT
+ * through --bg: stores/design.ts parses --bg (and --bg-elev/--bg-subtle) as
+ * a concrete #rrggbb hex for the accent/badge WCAG math, so a gradient in
+ * --bg would silently break that math. Their gradient stops sit within a
+ * few percent of --bg so body copy keeps its contrast.
+ *
+ * Full variable contract (consumed by base.css and, through it, the app):
+ *
+ *   --bg             page background (always a concrete #rrggbb hex)
+ *   --bg-image       optional decorative page wash (default `none`)
+ *   --bg-elev        raised surfaces (cards, panels, popovers)
+ *   --bg-subtle      recessed surface (sidebar, wells)
+ *   --fg             primary text
+ *   --fg-muted       secondary text (AA on --bg and --bg-subtle)
+ *   --fg-faint       de-emphasized copy, placeholders, disabled chrome
+ *                    (AA on --bg/--bg-subtle/--bg-elev, like --fg-muted)
+ *   --accent         accent (buttons, links, focus rings)
+ *   --accent-hover   accent hover variant (dark themes: lighter)
+ *   --accent-fg      text placed on top of --accent
+ *   --focus          focus ring color
+ *   --border         whisper hairlines (8-12% alpha)
+ *   --border-strong  control borders (inputs)
+ *   --danger         destructive actions and errors
+ *   --success        positive indicators (teal/green family)
+ *   --warning        caution indicators (orange family)
+ *   --msg-quote      quoted message text (warm orange family)
+ *   --msg-em         italicized message text (muted gray)
+ *   --msg-underline  underlined message text (soft green)
+ *   --badge-bg       tinted pill background
+ *   --badge-fg       tinted pill text
+ *   --shadow-card    subtle 1-2 layer card elevation
+ *   --shadow-deep    tight modal elevation
+ *   --scrim          modal overlay scrim
+ *   --scrollbar      scrollbar thumb color
+ */
+
+/* Theme-switch cross-fade: cheap color transition on the most common
+   surfaces only — deliberately NOT a global `*` transition. */
+body,
+.card,
+.panel,
+.btn,
+.input,
+.textarea,
+.select,
+.sidebar {
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out);
+}
+
+/* Tavern — warm charcoal, the reading-first default. Soft off-white prose,
+   amber quoted speech, muted warm gray italics. Surfaces stay close together
+   so the transcript reads as one page instead of stacked cards. */
+:root,
+:root[data-theme="tavern"] {
+  color-scheme: dark;
+  --bg: #171614;
+  --bg-elev: #1e1c19;
+  --bg-subtle: #121110;
+  --fg: #e8e2d8;
+  --fg-muted: #b0a798;
+  --fg-faint: #8b8173;
+  --accent: #dd9a50;
+  --accent-hover: #e9ab66;
+  --accent-fg: #1c1308;
+  --focus: #e3a45c;
+  --border: rgb(232 226 216 / 8%);
+  --border-strong: rgb(232 226 216 / 15%);
+  --danger: #e57368;
+  --success: #64b99a;
+  --warning: #e0a24c;
+  --msg-quote: #e6a145;
+  --msg-em: #a49b8e;
+  --msg-underline: #a8d5b8;
+  --badge-bg: rgb(221 154 80 / 14%);
+  --badge-fg: #e9b273;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 38%);
+  --shadow-deep: 0 16px 40px rgb(0 0 0 / 55%), 0 3px 10px rgb(0 0 0 / 38%);
+  --scrim: rgb(0 0 0 / 62%);
+  --scrollbar: rgb(232 226 216 / 14%);
+}
+
+/* Midnight — cool near-black, neutral. Layered charcoal-blue surfaces,
+   hairline structure, a crisp blue accent. */
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+  --bg: #0d0e11;
+  --bg-elev: #16181c;
+  --bg-subtle: #08090b;
+  --fg: #f4f5f7;
+  --fg-muted: #a2a8b3;
+  --fg-faint: #7a818d;
+  --accent: #5b9df9;
+  --accent-hover: #7cb2fb;
+  --accent-fg: #0b1220;
+  --focus: #6aa8fa;
+  --border: rgb(255 255 255 / 8%);
+  --border-strong: rgb(255 255 255 / 15%);
+  --danger: #ef5f66;
+  --success: #3ecf8e;
+  --warning: #e8a33d;
+  --msg-quote: #e18a24;
+  --msg-em: #9aa0aa;
+  --msg-underline: #a7e8c8;
+  --badge-bg: rgb(91 157 249 / 14%);
+  --badge-fg: #8fbcfa;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-deep: 0 12px 32px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 40%);
+  --scrim: rgb(0 0 0 / 62%);
+  --scrollbar: rgb(255 255 255 / 14%);
+}
+
+/* Coffee — warm dark, brown/amber. Precision espresso surfaces with a crisp
+   amber accent; warmer than midnight but the same hairline structure. */
+:root[data-theme="coffee"] {
+  color-scheme: dark;
+  --bg: #12100d;
+  --bg-elev: #1c1915;
+  --bg-subtle: #0b0a08;
+  --fg: #f5efe6;
+  --fg-muted: #b3a693;
+  --fg-faint: #8a8072;
+  --accent: #d9a15c;
+  --accent-hover: #e3b678;
+  --accent-fg: #1c1409;
+  --focus: #dda765;
+  --border: rgb(255 245 230 / 8%);
+  --border-strong: rgb(255 245 230 / 15%);
+  --danger: #e86a5e;
+  --success: #45b79a;
+  --warning: #e59a4a;
+  --msg-quote: #e18a24;
+  --msg-em: #9d9282;
+  --msg-underline: #a9dcc3;
+  --badge-bg: rgb(217 161 92 / 14%);
+  --badge-fg: #e3b678;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 42%);
+  --shadow-deep: 0 12px 32px rgb(0 0 0 / 58%), 0 2px 8px rgb(0 0 0 / 42%);
+  --scrim: rgb(0 0 0 / 62%);
+  --scrollbar: rgb(255 245 230 / 14%);
+}
+
+/* Aurora — cool dark, indigo. Deep indigo surfaces with a restrained
+   periwinkle accent; the cool counterpart to coffee's warmth. */
+:root[data-theme="aurora"] {
+  color-scheme: dark;
+  --bg: #0e0f1a;
+  --bg-elev: #171827;
+  --bg-subtle: #090a12;
+  --fg: #eef0f7;
+  --fg-muted: #a3a8c4;
+  --fg-faint: #7b809d;
+  --accent: #8b87f0;
+  --accent-hover: #a5a1f5;
+  --accent-fg: #0f1020;
+  --focus: #9692f2;
+  --border: rgb(230 232 255 / 8%);
+  --border-strong: rgb(230 232 255 / 15%);
+  --danger: #ef6268;
+  --success: #3fc79a;
+  --warning: #e5a04a;
+  --msg-quote: #e18a24;
+  --msg-em: #9a9eb4;
+  --msg-underline: #aee0cd;
+  --badge-bg: rgb(139 135 240 / 14%);
+  --badge-fg: #a5a1f5;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 44%);
+  --shadow-deep: 0 12px 32px rgb(0 0 0 / 58%), 0 2px 8px rgb(0 0 0 / 44%);
+  --scrim: rgb(0 0 0 / 62%);
+  --scrollbar: rgb(230 232 255 / 14%);
+}
+
+/* Nebula — gradient dark, violet. Near-black violet canvas with a restrained
+   magenta→cyan wash whose stops stay within a few percent of --bg (see the
+   header note on --bg-image) so body copy keeps its contrast. Accent is the
+   theme's own soft orchid, kept deliberately away from a generic purple glow. */
+:root[data-theme="nebula"] {
+  color-scheme: dark;
+  --bg: #100f1c;
+  --bg-image: radial-gradient(
+    130% 115% at 12% -10%,
+    #1e1533 0%,
+    color-mix(in srgb, #1e1533 45%, #100f1c) 38%,
+    #100f1c 68%,
+    #0b1a24 100%
+  );
+  --bg-elev: #191830;
+  --bg-subtle: #0b0a15;
+  --fg: #f0eef8;
+  --fg-muted: #a9a4c9;
+  --fg-faint: #827ea6;
+  --accent: #b489f5;
+  --accent-hover: #c8a6f8;
+  --accent-fg: #150f22;
+  --focus: #bd97f6;
+  --border: rgb(226 220 255 / 8%);
+  --border-strong: rgb(226 220 255 / 15%);
+  --danger: #ef6268;
+  --success: #3fc79a;
+  --warning: #e5a04a;
+  --msg-quote: #e18a24;
+  --msg-em: #9b98b2;
+  --msg-underline: #aee0cd;
+  --badge-bg: rgb(180 137 245 / 14%);
+  --badge-fg: #c8a6f8;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 46%);
+  --shadow-deep: 0 12px 32px rgb(0 0 0 / 60%), 0 2px 8px rgb(0 0 0 / 46%);
+  --scrim: rgb(0 0 0 / 64%);
+  --scrollbar: rgb(226 220 255 / 14%);
+}
+
+/* Daylight — the crisp light: white canvas, cool near-white alternation,
+   Notion Blue accent, whisper hairlines. */
+:root[data-theme="daylight"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-elev: #ffffff;
+  --bg-subtle: #f7f8f9;
+  --fg: rgb(9 9 11 / 96%);
+  --fg-muted: #5c6169;
+  --fg-faint: #6e7377;
+  --accent: #0075de;
+  --accent-hover: #005bab;
+  --accent-fg: #ffffff;
+  --focus: #097fe8;
+  --border: rgb(0 0 0 / 9%);
+  --border-strong: rgb(0 0 0 / 16%);
+  --danger: #c0342b;
+  --success: #0e756c;
+  --warning: #a34400;
+  --msg-quote: #9a5600;
+  --msg-em: #6b6f75;
+  --msg-underline: #166e45;
+  --badge-bg: #eef7ff;
+  --badge-fg: #0075de;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-deep: 0 12px 32px rgb(0 0 0 / 12%), 0 2px 8px rgb(0 0 0 / 8%);
+  --scrim: rgb(15 15 15 / 40%);
+  --scrollbar: rgb(0 0 0 / 16%);
+}
+
+/* Paper — warm light: cream canvas, paper-white raised surfaces, a deep brown
+   accent. Crisper and cooler than the old sepia, with hairline structure. */
+:root[data-theme="paper"] {
+  color-scheme: light;
+  --bg: #f6f1e6;
+  --bg-elev: #fffdf8;
+  --bg-subtle: #efe9db;
+  --fg: #2f2a22;
+  --fg-muted: #645b4c;
+  --fg-faint: #71685d;
+  --accent: #7d5226;
+  --accent-hover: #6a451f;
+  --accent-fg: #fffdf8;
+  --focus: #7d5226;
+  --border: rgb(47 40 28 / 12%);
+  --border-strong: rgb(47 40 28 / 20%);
+  --danger: #a3341f;
+  --success: #0e756c;
+  --warning: #a34400;
+  --msg-quote: #9a5600;
+  --msg-em: #625a4d;
+  --msg-underline: #206a45;
+  --badge-bg: rgb(125 82 38 / 12%);
+  --badge-fg: #7d5226;
+  --shadow-card: 0 1px 2px rgb(47 40 28 / 7%);
+  --shadow-deep: 0 12px 32px rgb(47 40 28 / 14%), 0 2px 8px rgb(47 40 28 / 8%);
+  --scrim: rgb(47 40 28 / 40%);
+  --scrollbar: rgb(47 40 28 / 20%);
+}
+
+/* Mist — cool gray-blue light: overcast canvas, near-white raised surfaces,
+   steel blue accent. Calm and low-glare, distinct from daylight (white) and
+   paper (cream). */
+:root[data-theme="mist"] {
+  color-scheme: light;
+  --bg: #eef1f4;
+  --bg-elev: #f8fafb;
+  --bg-subtle: #e5e9ee;
+  --fg: rgb(12 16 24 / 95%);
+  --fg-muted: #4c5560;
+  --fg-faint: #636973;
+  --accent: #33689f;
+  --accent-hover: #2a5786;
+  --accent-fg: #ffffff;
+  --focus: #3a6ea8;
+  --border: rgb(24 32 44 / 11%);
+  --border-strong: rgb(24 32 44 / 18%);
+  --danger: #b42318;
+  --success: #0e756c;
+  --warning: #9a4708;
+  --msg-quote: #9a5600;
+  --msg-em: #5a626c;
+  --msg-underline: #17714e;
+  --badge-bg: rgb(51 104 159 / 12%);
+  --badge-fg: #2f5f92;
+  --shadow-card: 0 1px 2px rgb(24 32 44 / 7%);
+  --shadow-deep: 0 12px 32px rgb(24 32 44 / 14%), 0 2px 8px rgb(24 32 44 / 8%);
+  --scrim: rgb(24 32 44 / 40%);
+  --scrollbar: rgb(24 32 44 / 20%);
+}
+
+/* Lagoon — gradient light, aqua. Cool aqua-tinted canvas with a teal→sky wash
+   whose stops stay within a few percent of --bg so body copy keeps its
+   contrast. Accent is a deep teal, distinct from mist's steel blue. */
+:root[data-theme="lagoon"] {
+  color-scheme: light;
+  --bg: #ecf3f4;
+  --bg-image: radial-gradient(
+    135% 120% at 85% -15%,
+    #dceeec 0%,
+    color-mix(in srgb, #dceeec 55%, #ecf3f4) 40%,
+    #ecf3f4 70%,
+    #dcecf5 100%
+  );
+  --bg-elev: #fafdfd;
+  --bg-subtle: #e1ebec;
+  --fg: #10303a;
+  --fg-muted: #3f5f69;
+  --fg-faint: #536d76;
+  --accent: #0d6f7c;
+  --accent-hover: #0a5a66;
+  --accent-fg: #ffffff;
+  --focus: #0d6f7c;
+  --border: rgb(16 48 58 / 11%);
+  --border-strong: rgb(16 48 58 / 18%);
+  --danger: #b42318;
+  --success: #0e756c;
+  --warning: #9a4708;
+  --msg-quote: #9a5600;
+  --msg-em: #536a72;
+  --msg-underline: #17714e;
+  --badge-bg: rgb(13 111 124 / 12%);
+  --badge-fg: #0b5e6a;
+  --shadow-card: 0 1px 2px rgb(13 43 50 / 7%);
+  --shadow-deep: 0 12px 32px rgb(13 43 50 / 14%), 0 2px 8px rgb(13 43 50 / 8%);
+  --scrim: rgb(13 43 50 / 40%);
+  --scrollbar: rgb(16 48 58 / 20%);
+}

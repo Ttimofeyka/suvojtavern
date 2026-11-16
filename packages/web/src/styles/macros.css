@@ -1,0 +1,193 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Macros guide (MacrosGuideModal.tsx) — character editor → Macros.
+ *
+ * Guide-scoped styles only. The search field reuses the global .search-field
+ * vocabulary from views.css; everything else here is the macro entry layout:
+ * a monospace syntax column, a muted example, and a copy affordance.
+ *
+ * Colors come from theme tokens (never literals) and nothing animates beyond
+ * transform/opacity, per DESIGN.md.
+ */
+
+/* --- Intro ------------------------------------------------------------------- */
+
+.macros-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.macros-intro p {
+  margin: 0;
+}
+
+/* The guide is long; a little breathing room under the search keeps the
+   first section title from crowding the input. */
+.macros-search {
+  margin-bottom: var(--space-2);
+}
+
+/* --- Sections ---------------------------------------------------------------- */
+
+.macros-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: var(--hairline);
+}
+
+.macros-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.macros-section-title {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+}
+
+.macros-section-blurb {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* --- Entries ----------------------------------------------------------------- */
+
+.macros-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.macros-entry {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+/* The syntax column: the thing an author copies, so it gets its own surface
+   and the monospace token rather than reading as body copy. */
+.macros-syntax {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.macros-syntax code {
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+  line-height: var(--lh-badge);
+  overflow-wrap: anywhere;
+}
+
+.macros-syntax-name {
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.macros-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.macros-desc {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.macros-example {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* The note is a caveat, not body copy — a left rule ties it to the entry
+   without adding another box. */
+.macros-note {
+  margin: 2px 0 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  line-height: var(--lh-badge);
+}
+
+/* Copy button pinned to the top-right of the row so it aligns regardless of
+   how many lines the description wraps to. */
+.macros-copy {
+  align-self: start;
+}
+
+/* --- Empty state ------------------------------------------------------------- */
+
+.macros-empty {
+  margin: 0;
+  padding: var(--space-5) 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  text-align: center;
+}
+
+/* --- Discoverability link in the editor's field-label-row ------------------- */
+
+/* Pushes the "What are macros?" link to the end of the row (label + badge +
+   info-tip keep their own flow). Scoped here rather than in views.css so the
+   shared .field-label-row stays untouched. Sized to the row's caption text
+   (not .btn's nav size) so adding the link never inflates the label row. */
+.macros-field-link {
+  margin-left: auto;
+  padding: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+}
+
+/* The inline hint link: keep it the size of the surrounding .field-hint text
+   instead of .btn's default nav size, and drop the button padding so it sits
+   flush on the sentence baseline. */
+.macros-hint-link {
+  padding: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+  vertical-align: baseline;
+}
+
+/* Narrow panels: the three-column entry collapses so the syntax and copy
+   column stop competing with the description. */
+@media (max-width: 640px) {
+  .macros-entry {
+    grid-template-columns: 1fr auto;
+  }
+
+  .macros-syntax {
+    grid-column: 1 / -1;
+  }
+}

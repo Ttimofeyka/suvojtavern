@@ -1,0 +1,134 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * SuvojTavern motion system — CSS-first animation utilities.
+ *
+ * Usage guide (phases C2-C4 apply these to components):
+ *  - `.anim-rise` — fade + 8px rise (--dur-med).
+ *  - `.anim-scale`— pop-in: 0.97 scale + rise (--dur-med), for floating layers.
+ *  - Stagger lists: apply `.anim-rise` and set
+ *    `style="--stagger-i: n"` on each child; the delay becomes
+ *    `calc(var(--stagger-i) * 60ms)`. The 60ms step is sequencing, not a
+ *    decorative loop, so it deliberately does NOT scale with --motion-scale.
+ *  - `.page-enter` — --dur-page fade + rise for route/view roots.
+ *
+ * Every duration is token-derived (tokens.css), so it scales with
+ * --motion-scale; the reference ms values live on the tokens.
+ *
+ * All keyframes animate transform/opacity only (compositor-friendly).
+ * Everything is disabled under prefers-reduced-motion (also see the
+ * global kill block at the end of base.css).
+ */
+
+/* --- Keyframes --------------------------------------------------------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Pop for floating layers (modals, popovers): scale-in (0.97 -> 1) + rise. */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-soft {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Streaming-caret variants (styles/chat.css .live-cursor[data-writing="…"]).
+   Both stay on opacity/transform so they composite, and both scale with
+   --motion-scale; design.css pins every caret variant static under "off". */
+@keyframes caret-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes caret-wave {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(1px) scaleY(0.75);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-1px) scaleY(1.05);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Utilities ---------------------------------------------------------- */
+
+/* Fill mode is `backwards`, never `both`: `both` keeps the final keyframe
+   applied after the animation ends, which leaves a computed transform on
+   the element — permanently making it the containing block for every
+   fixed-positioned descendant (modals included). `backwards` covers only
+   the pre-delay period; afterwards the element reverts to its natural
+   style, which equals the implicit `to` keyframe of these keyframes. */
+
+.anim-rise {
+  animation: rise-in var(--dur-med) var(--ease-out) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 60ms);
+}
+
+.anim-scale {
+  animation: scale-in var(--dur-med) var(--ease-out) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 60ms);
+}
+
+/* Route/view roots — apply to the top-level element of each view. */
+.page-enter {
+  animation: rise-in var(--dur-page) var(--ease-out) backwards;
+}
+
+/* --- Reduced motion ------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise,
+  .anim-scale,
+  .page-enter {
+    animation: none;
+  }
+}

@@ -1,0 +1,687 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * App shell chrome — the C2 sidebar and main content column.
+ *
+ * base.css owns the structural shell mechanics (the .app-shell flex
+ * skeleton, the .sidebar surface, and the .nav-link basics); this file
+ * layers the polish on top: the permanent icon-rail styling, the brand
+ * mark, nav states, the shared theme swatches, and the centered content
+ * rhythm in .app-main. Loaded after base.css (see src/index.tsx).
+ */
+
+/* --- Main pane ------------------------------------------------------------- */
+
+/* Lock the shell to the viewport: the sidebar and the main pane each
+   manage their own scrolling, so the nav never scrolls away. */
+.app-shell {
+  height: 100dvh;
+
+  /* Off-canvas drawer duration (the mobile nav drawer and the chat-history
+     slide-over, whose own copy lives in chat.css). Deliberately separate from
+     --dur-slow (which scales from its 320ms hover-tuned base — see
+     .card-hover): a composed layout move reads better slightly slower.
+     Derived from --motion-scale so the motion-intensity preference scales it
+     too. */
+  --dur-collapse: calc(400ms * var(--motion-scale));
+}
+
+.app-main {
+  overflow-y: auto;
+}
+
+/* Route content mounts inside this wrapper once per app load; .page-enter
+   eases the first paint only. Per-route transitions belong to the views. */
+.app-main-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Content views (their roots are section.stack) ride a centered column
+   (DESIGN.md §5): comfortable max width, generous vertical rhythm. The
+   chat workspace is not a .stack root — it fills the pane exactly. */
+.app-main-content > section.stack {
+  width: min(100%, var(--container-max));
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+/* --- Sidebar rail ------------------------------------------------------------ */
+
+/* The vertical rail is a permanent icon column: labels are hidden here and
+   surface as tooltips (Sidebar.tsx). The color entries keep the theme
+   cross-fade from themes.css alive under this higher-specificity rule. */
+.app-shell > .sidebar {
+  /* overflow-y: auto (base.css) forces the x-axis to compute to auto,
+     which surfaces a ~3px horizontal scrollbar artifact in the narrow rail.
+     Clipping kills the artifact; vertical scrolling is intact. */
+  overflow-x: hidden;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out);
+}
+
+/* The desktop rail keeps its labels visible: icons alone made the six
+   destinations a memory test for new users. The top layout and the mobile
+   drawer inherit the same labeled rows, so no restore rules are needed. */
+
+/* --- Nav links --------------------------------------------------------------- */
+
+/* Extends .nav-link (base.css) with the indicator anchor and the icon-rail
+   centering. The softer --dur-med tint and the crisp radius keep the
+   hover/active states from feeling abrupt; touch-action drops the 300ms tap
+   delay on touch. */
+.app-shell > .sidebar .nav-link {
+  position: relative;
+  /* radius-sm (4px): crisp nav rows, matching the precision scale; the
+     rail/top-bar hover pill reads as a control, not a lozenge. */
+  border-radius: var(--radius-sm);
+  touch-action: manipulation;
+  /* Labeled rail: keep the base inline padding so the icon and wordmark share
+     one optical edge. Top mode and the mobile drawer reset it the same way. */
+  padding-left: 10px;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+/* The icon answers the pointer with a one-pixel lift; the label and the active
+   indicator stay put, so navigation never looks like it is reflowing. Gated to
+   fine pointers, and reduced motion still gets the color state above. */
+.app-shell > .sidebar .nav-icon {
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .app-shell > .sidebar .nav-link:hover .nav-icon {
+    transform: translateY(-1px);
+  }
+}
+
+.app-shell > .sidebar .nav-link:active {
+  transform: scale(0.985);
+}
+
+/* Active route (aria-current="page", set by Sidebar.tsx): accent-tinted pill
+   with an accent-colored icon and a whisper of a leading indicator bar. The
+   tint is restrained (10%) so the accent stays an accent. */
+.app-shell > .sidebar .nav-link[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Hover-only (gated): on touch a tap would leave a sticky :hover on the row. */
+@media (hover: hover) {
+  .app-shell > .sidebar .nav-link[aria-current="page"]:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+}
+
+/* The glyph tint tracks the link's own color with the same timing, so the
+   active accent does not lag the pill behind it. Declared before the active
+   rule below so specificity ascends (lint-friendly). */
+.app-shell > .sidebar .nav-link .nav-icon {
+  transition: color var(--dur-med) var(--ease-out);
+}
+
+.app-shell > .sidebar .nav-link[aria-current="page"] .nav-icon {
+  color: var(--accent);
+}
+
+/* Press feedback: pointer-down deepens the fill a step, matching the .btn
+   press language. Deliberately no transform — a scaled nav link would offset
+   Motion's layout measurement of the shared active indicator. */
+.app-shell > .sidebar .nav-link:active {
+  background: var(--surface-active);
+}
+
+.app-shell > .sidebar .nav-link[aria-current="page"]:active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Active-route indicator: one element carrying a shared layoutId, rendered
+   only on the current link (Sidebar.tsx), so Motion glides it between nav
+   items on route change instead of popping. Vertical rails show it as a
+   leading bar; the top-bar override below swaps it for a centered underline.
+   Decorative — the aria-current background and icon tint carry the state on
+   their own, so nothing here is load-bearing. */
+.app-shell > .sidebar .nav-active-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* --- Brand ------------------------------------------------------------------- */
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  color: var(--accent);
+}
+
+/* The logo image (public/logo.png, served at /logo.png) is decorative —
+   the surrounding .brand-mark carries the aria-hidden semantics. The
+   img needs explicit sizing (its intrinsic 352px would blow up the
+   box); object-fit keeps the square artwork intact inside the mark. */
+.brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Keep the brand single-line whatever the available width (the .row utility
+   would otherwise wrap). nowrap is a cheap guard; top mode and the drawer
+   show the wordmark too. */
+.app-shell > .sidebar .sidebar-brand {
+  flex-wrap: nowrap;
+  /* Align the brand mark with the labeled nav rows. */
+  padding-left: var(--space-2);
+}
+
+/* --- Theme swatches ----------------------------------------------------------- */
+
+/* Circle swatches (used by the Settings appearance section): each shows
+   its theme's canvas + accent as a diagonal split. The colors are
+   per-theme-id constants — the whole point is to look like the target
+   theme whatever the current one is. */
+.theme-swatch {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform var(--dur-med) var(--ease-spring),
+    border-color var(--dur-med) var(--ease-out),
+    box-shadow var(--dur-med) var(--ease-out);
+}
+
+/* Hover-only lift: on touch a sticky :hover would leave the swatch stuck
+   enlarged after a tap. */
+@media (hover: hover) {
+  .theme-swatch:hover {
+    border-color: var(--fg-faint);
+    transform: scale(1.12);
+  }
+}
+
+.theme-swatch[data-theme-id="tavern"] {
+  background: linear-gradient(135deg, #171614 50%, #dd9a50 50%);
+}
+
+.theme-swatch[data-theme-id="midnight"] {
+  background: linear-gradient(135deg, #0d0e11 50%, #5b9df9 50%);
+}
+
+.theme-swatch[data-theme-id="coffee"] {
+  background: linear-gradient(135deg, #12100d 50%, #d9a15c 50%);
+}
+
+.theme-swatch[data-theme-id="aurora"] {
+  background: linear-gradient(135deg, #0e0f1a 50%, #8b87f0 50%);
+}
+
+.theme-swatch[data-theme-id="daylight"] {
+  background: linear-gradient(135deg, #ffffff 50%, #0075de 50%);
+}
+
+.theme-swatch[data-theme-id="paper"] {
+  background: linear-gradient(135deg, #f6f1e6 50%, #7d5226 50%);
+}
+
+.theme-swatch[data-theme-id="mist"] {
+  background: linear-gradient(135deg, #eef1f4 50%, #33689f 50%);
+}
+
+/* The two gradient themes get a three-stop swatch (canvas → their own
+   gradient's mid stop → accent) so the preview visibly reads as a gradient
+   rather than the flat diagonal split the other six use. */
+.theme-swatch[data-theme-id="nebula"] {
+  background: linear-gradient(135deg, #100f1c 0%, #1e1533 55%, #b489f5 100%);
+}
+
+.theme-swatch[data-theme-id="lagoon"] {
+  background: linear-gradient(135deg, #ecf3f4 0%, #dceeec 55%, #0d6f7c 100%);
+}
+
+/* The check disc only ever renders on the active swatch (the enclosing
+   .set-theme-card carries the pressed state), so the current theme's fg/bg
+   pair always contrasts. */
+.theme-check {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--fg);
+  color: var(--bg-subtle);
+}
+
+/* --- Top bar (horizontal sidebar) ----------------------------------------------- */
+
+/* "Top" layout (Settings → Layout → Side): the shell stacks the bar above
+   the main pane and the sidebar becomes one horizontal row — brand left,
+   nav items flowing right. Only direction and borders change; every
+   vertical rule above stays untouched for left/right. */
+.app-shell.sidebar-top {
+  flex-direction: column;
+}
+
+.app-shell.sidebar-top > .sidebar {
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  gap: var(--space-3);
+  /* The rail's 8px inline padding is tuned for the 76px icon column; the
+     horizontal bar keeps the roomier 12px gutter. */
+  padding-inline: var(--space-3);
+  /* The bar itself never scrolls — the NAV becomes the horizontal
+     scroller (below) — so the rail's clip fix (overflow-x above) is
+     dropped and overflow is reset: tooltips have to escape the bar (see
+     the flip rule below). */
+  overflow: visible;
+  border-right: none;
+  border-bottom: var(--hairline);
+}
+
+/* Nav items flow as a single non-wrapping row. Scrolling (not wrapping)
+   keeps every link reachable on narrow viewports; a wrapped bar would change
+   height as items move between rows. The scrollbar is deliberately hidden to
+   keep the bar's height fixed. Tooltips are a single fixed-position element
+   mounted on <body> (lib/tooltip.ts), so this container does not clip them. */
+.app-shell.sidebar-top > .sidebar .sidebar-nav {
+  flex: 1 1 auto;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+/* Hide the WebKit scrollbar for the same reason as scrollbar-width above. */
+.app-shell.sidebar-top > .sidebar .sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* The vertical rail's icon-centering padding (20px) would shove every icon
+   off-center in the full-width bar, so top mode resets to the base padding. */
+.app-shell.sidebar-top > .sidebar .nav-link {
+  padding-left: 10px;
+}
+
+.app-shell.sidebar-top > .sidebar .sidebar-brand {
+  padding-left: var(--space-2);
+}
+
+/* Top mode is a full-width horizontal bar, so it shows the labels and the
+   wordmark inline — re-show what the vertical rail hides above. */
+.app-shell.sidebar-top > .sidebar .nav-label,
+.app-shell.sidebar-top > .sidebar .sidebar-title {
+  display: revert;
+}
+
+/* Active link: the rail's leading bar becomes a centered underline, the
+   horizontal idiom for the current tab. Motion flies the same shared element
+   along the horizontal axis to match. */
+.app-shell.sidebar-top > .sidebar .nav-active-indicator {
+  left: 50%;
+  top: auto;
+  bottom: 0;
+  translate: -50% 0;
+  width: 16px;
+  height: 2px;
+}
+
+/* --- Mobile off-canvas navigation ---------------------------------------------- */
+
+/* Desktop default: the drawer close button and the nav scrim do not exist
+   visually; the sidebar stays inline. The phone-only nav trigger is likewise
+   hidden here so ≥761px is byte-identical to the pre-change shell. */
+.mobile-nav-trigger,
+.sidebar-close,
+.mobile-nav-scrim {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  /* The sidebar stacks above the main pane, so the shell becomes a column
+     regardless of the configured side (row-reverse from sidebar-right
+     would otherwise flip the drawer to the right edge). */
+  .app-shell,
+  .app-shell.sidebar-right,
+  .app-shell.sidebar-top {
+    flex-direction: column;
+  }
+
+  /* Phone-only hamburger, living in each screen's own header rather than a
+     dedicated top bar — the bar's 48px are reclaimed for content. 40x40
+     matches the removed bar's touch target. */
+  .mobile-nav-trigger {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    flex: none;
+  }
+
+  /* chat.css shrinks every .btn-icon in the history head to 28px (0,2,0) and
+     loads after this file, so a plain .mobile-nav-trigger (0,1,0) would lose
+     the cascade. The extra .app-shell raises this to (0,3,0), keeping the
+     40px touch target on the list's hamburger. Declared ahead of the
+     higher-specificity hide rules below so this file's trigger selectors keep
+     ascending specificity. */
+  .app-shell .chat-history-head .mobile-nav-trigger {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  /* The removed bar owned the notch clearance via env(safe-area-inset-top);
+     index.html sets viewport-fit=cover, so the main pane must supply it now.
+     On non-notched devices the inset is 0 and the full bar height is
+     reclaimed. */
+  .app-main {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* "Top" mode is already an always-visible inline icon strip on phones, so
+     a hamburger would only re-expose the nav the strip shows. */
+  .app-shell.sidebar-top .mobile-nav-trigger {
+    display: none;
+  }
+
+  /* The open chat-history slide-over is a temporary overlay; a trigger inside
+     it would duplicate the nav affordance the conversation header owns.
+     :not(.mobile-chats-static) keeps the trigger visible when the open flag
+     lingers after the active chat is deleted (the list is then in-flow
+     content, not an overlay). */
+  .chats-layout.mobile-chats-open:not(.mobile-chats-static) .mobile-nav-trigger {
+    display: none;
+  }
+
+  /* Management views have no header row sized for an extra control, so the
+     trigger is absolutely placed at the header's top-left and the heading is
+     indented to clear it. Scoped to :not(.sidebar-top), where the button is
+     hidden, so no dead indent appears in that mode. */
+  .app-shell:not(.sidebar-top) .page-header {
+    position: relative;
+  }
+
+  .app-shell:not(.sidebar-top) .page-header .mobile-nav-trigger {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .app-shell:not(.sidebar-top) .page-header > .page-heading {
+    padding-left: 48px;
+  }
+
+  /* The no-chats screen is a centered grid with no header of its own, so the
+     trigger is absolutely placed top-left to stay reachable. */
+  .app-shell:not(.sidebar-top) .chats-empty-screen {
+    position: relative;
+  }
+
+  .app-shell:not(.sidebar-top) .chats-empty-screen .mobile-nav-trigger {
+    position: absolute;
+    top: var(--space-3);
+    left: var(--space-3);
+  }
+
+  /* Soft edge so the drawer reads as a layer above the content. Declared at
+     the base .app-shell specificity (below the glass surface's
+     :root[data-surfaces="glass"] .sidebar), and only the open rule below
+     supplies a value, so a closed off-canvas drawer casts no shadow sliver. */
+  .app-shell > .sidebar {
+    box-shadow: var(--drawer-shadow, none);
+  }
+
+  /* The sidebar leaves the flow and becomes an off-canvas drawer over the
+     content. This covers left/right; top mode is reverted to an inline strip
+     by the "Mobile top-bar layout" block below (which overrides these rules
+     at equal specificity, later in the file).
+     +3 keeps the global nav drawer above the chat slide-over drawer
+     (chat.css: --z-overlay + 1) so the chat list never paints over it. */
+  .app-shell > .sidebar,
+  .app-shell.sidebar-top > .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    z-index: calc(var(--z-overlay) + 3);
+    width: min(320px, 85vw);
+    max-width: 85vw;
+    flex-direction: column;
+    align-items: stretch;
+    border-right: var(--hairline);
+    border-left: none;
+    border-bottom: none;
+    transform: translateX(-100%);
+    /* Hidden while closed so the off-screen links leave the tab order and the
+       accessibility tree (translateX alone only moves them off-screen — they
+       stay focusable). The visibility flip is delayed by --dur-collapse so it
+       happens after the slide-out finishes, not before it starts; on open the
+       rule below re-declares the transition without the delay, so the drawer
+       is exposed immediately. Mirrors chat.css's .chats-side slide-over. */
+    visibility: hidden;
+    transition:
+      transform var(--dur-collapse) var(--ease-out),
+      background-color var(--dur-med) var(--ease-out),
+      border-color var(--dur-med) var(--ease-out),
+      color var(--dur-med) var(--ease-out),
+      visibility 0ms linear var(--dur-collapse);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-top: max(var(--space-3), env(safe-area-inset-top, 0px));
+    padding-right: var(--space-3);
+    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
+    padding-left: max(var(--space-3), env(safe-area-inset-left, 0px));
+  }
+
+  /* side=right positions on the right edge (transform comes below). */
+  .app-shell.sidebar-right > .sidebar {
+    left: auto;
+    right: 0;
+    border-right: none;
+    border-left: var(--hairline);
+    padding-left: var(--space-3);
+    padding-right: max(var(--space-3), env(safe-area-inset-right, 0px));
+  }
+
+  /* Open state: the drawer slides to rest (overrides both edge transforms).
+     The soft edge is set through the variable the rule above reads, so it
+     only appears while the drawer is on screen (no shadow sliver bleeding
+     from the closed off-canvas position). */
+  .app-shell.mobile-nav-open > .sidebar,
+  .app-shell.sidebar-right.mobile-nav-open > .sidebar {
+    transform: none;
+    visibility: visible;
+    /* Re-declared without the visibility delay so the drawer becomes visible
+       (and focusable) the instant it opens; otherwise the base rule's delayed
+       flip would hide it for the whole slide-in. */
+    transition:
+      transform var(--dur-collapse) var(--ease-out),
+      background-color var(--dur-med) var(--ease-out),
+      border-color var(--dur-med) var(--ease-out),
+      color var(--dur-med) var(--ease-out);
+    --drawer-shadow: var(--shadow-deep);
+  }
+
+  /* Closed state for the right drawer. :not() keeps this equal-specificity
+     with (and later than) the open rule, so opening still wins. */
+  .app-shell.sidebar-right:not(.mobile-nav-open) > .sidebar {
+    transform: translateX(100%);
+  }
+
+  /* The mobile drawer shows full labels, so undo the vertical rail's
+     icon-only hiding and its icon-centering padding. */
+  .app-shell > .sidebar .nav-label,
+  .app-shell > .sidebar .sidebar-title {
+    display: revert;
+  }
+
+  .app-shell > .sidebar .nav-link {
+    padding-left: 10px;
+  }
+
+  .app-shell > .sidebar .sidebar-brand {
+    padding-left: var(--space-2);
+  }
+
+  /* Dimmed backdrop; only mounted while the drawer is open.
+     +2 sits below the nav drawer (+3) but above the chat slide-over's
+     scrim (--z-overlay), so tapping it dismisses the nav first. */
+  .mobile-nav-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-overlay) + 2);
+    display: block;
+    border: none;
+    padding: 0;
+    background: var(--scrim);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+  }
+
+  /* Mobile-only close affordance, pinned to the brand row's trailing edge.
+     40x40 keeps the tap target square and finger-sized. */
+  .sidebar-close {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin-left: auto;
+    flex: none;
+  }
+
+  /* Top-bar layout's horizontal nav rules must not leak into the drawer. */
+  .app-shell.sidebar-top > .sidebar .sidebar-nav {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .app-shell.sidebar-top > .sidebar .nav-link {
+    padding-left: 10px;
+  }
+
+  .app-shell.sidebar-top > .sidebar .sidebar-brand {
+    padding-left: var(--space-2);
+  }
+}
+
+/* --- Mobile top-bar layout ---------------------------------------------------- */
+
+/* In top mode the sidebar is already a horizontal bar, so on mobile it stays
+   an inline icon-only strip instead of collapsing into the off-canvas drawer:
+   the hamburger would only re-expose the nav the bar already shows. The drawer
+   rules above apply to every mode, so these overrides (equal specificity,
+   later in the file) restore the bar for top mode only. Left/right keep the
+   drawer untouched. */
+@media (max-width: 760px) {
+  /* The scrim has no role in an always-visible bar; the trigger's own
+     top-mode hide rule lives with the off-canvas block above. */
+  .app-shell.sidebar-top .mobile-nav-scrim {
+    display: none;
+  }
+
+  /* Return the sidebar to the flow as a horizontal top bar. */
+  .app-shell.sidebar-top > .sidebar {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    width: 100%;
+    max-width: none;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-1);
+    overflow: visible;
+    transform: none;
+    /* Top mode never becomes an off-canvas drawer, so it must undo the base
+       rule's hidden state above; this block is later at equal specificity. */
+    visibility: visible;
+    border-right: none;
+    border-left: none;
+    border-bottom: var(--hairline);
+    --drawer-shadow: none;
+    padding: var(--space-1) var(--space-2);
+    padding-top: max(var(--space-1), env(safe-area-inset-top, 0px));
+    padding-left: max(var(--space-2), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--space-2), env(safe-area-inset-right, 0px));
+  }
+
+  /* Icons flow in a single row, scrolling horizontally if a plugin adds
+     more items than the viewport can hold. */
+  .app-shell.sidebar-top > .sidebar .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  /* Icon-only: labels and the wordmark are redundant on the bar. */
+  .app-shell.sidebar-top > .sidebar .nav-label,
+  .app-shell.sidebar-top > .sidebar .sidebar-title {
+    display: none;
+  }
+
+  /* 40x40 square touch targets. */
+  .app-shell.sidebar-top > .sidebar .nav-link {
+    justify-content: center;
+    gap: 0;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  /* Brand is just the mark; the close button is a drawer affordance with
+     nothing to do in an always-icon bar. */
+  .app-shell.sidebar-top > .sidebar .sidebar-brand {
+    padding: 0;
+    gap: 0;
+  }
+
+  .app-shell.sidebar-top > .sidebar .sidebar-close {
+    display: none;
+  }
+
+  /* Plugin links join the same strip, with a leading divider. Their label is
+     hidden by the .nav-label rule above. */
+  .app-shell.sidebar-top > .sidebar .sidebar-plugins {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    margin-top: 0;
+    padding-top: 0;
+    padding-left: var(--space-1);
+    border-top: none;
+    border-left: var(--hairline);
+  }
+}

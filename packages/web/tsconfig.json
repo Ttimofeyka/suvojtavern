@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    // Browser package keeps a bun-free type surface: the base config's
+    // "bun-types" is replaced with the React runtimes the JSX transform needs.
+    "types": ["react", "react-dom"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "include": ["src", "vite.config.ts"],
+  // bun:test suites (run by the root `bun test`) are excluded here: the
+  // browser package keeps a bun-free type surface (no "bun-types" in `types`).
+  "exclude": ["src/**/*.test.ts"]
+}

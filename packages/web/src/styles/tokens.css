@@ -1,0 +1,224 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * SuvojTavern design tokens — the single source of truth.
+ *
+ * Implements the token layer of DESIGN.md (Notion-inspired system):
+ * typography (§3), spacing (§5), radius scale (§5), elevation (§6),
+ * and motion/z-index infrastructure.
+ *
+ * Rules of engagement:
+ *  - Themes (themes.css) override the *color* tokens per theme; everything
+ *    defined here is theme-agnostic structure.
+ *  - Components consume tokens, never raw values. Phases C2-C4 must build
+ *    on this vocabulary rather than inventing new scales.
+ *  - The shadow values below are the DESIGN.md light-theme reference stacks;
+ *    dark themes override them (raised opacity, tinted toward the bg hue).
+ */
+
+:root {
+  /* --- Typography (DESIGN.md §3) -------------------------------------- */
+
+  /* "Inter Variable" ships from @fontsource-variable/inter; plain Inter
+     covers locally installed copies; the rest is the system fallback. */
+  --font-sans: "Inter Variable", Inter, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Numeric data (steppers, counters, pagination, JSON keys) opts into this so
+     digit widths stay fixed and values don't jitter the layout as they change.
+     Exposed as a token so feature styles can reference the same value. */
+  --fvn-tabular: tabular-nums;
+
+  /* Type scale — 16 roles. fs = size, fw = weight, lh = line-height,
+     ls = letter-spacing. Negative tracking relaxes as size decreases. */
+  --fs-display-hero: 4rem; /* 64px */
+  --fw-display-hero: 700;
+  --lh-display-hero: 1;
+  --ls-display-hero: -2.125px;
+
+  --fs-display-secondary: 3.375rem; /* 54px */
+  --fw-display-secondary: 700;
+  --lh-display-secondary: 1.04;
+  --ls-display-secondary: -1.875px;
+
+  --fs-section-heading: 3rem; /* 48px */
+  --fw-section-heading: 700;
+  --lh-section-heading: 1;
+  --ls-section-heading: -1.5px;
+
+  --fs-sub-heading-large: 2.5rem; /* 40px */
+  --fw-sub-heading-large: 700;
+  --lh-sub-heading-large: 1.5;
+  --ls-sub-heading-large: normal;
+
+  --fs-sub-heading: 1.625rem; /* 26px */
+  --fw-sub-heading: 700;
+  --lh-sub-heading: 1.23;
+  --ls-sub-heading: -0.75px;
+
+  --fs-card-title: 1.375rem; /* 22px */
+  --fw-card-title: 700;
+  --lh-card-title: 1.27;
+  --ls-card-title: -0.3px;
+
+  --fs-body-large: 1.25rem; /* 20px */
+  --fw-body-large: 600;
+  --lh-body-large: 1.4;
+  --ls-body-large: -0.125px;
+
+  --fs-body: 1rem; /* 16px */
+  --fw-body: 400;
+  --lh-body: 1.5;
+  --ls-body: normal;
+
+  --fw-body-medium: 500;
+  --fw-body-semibold: 600;
+  --fw-body-bold: 700;
+
+  --fs-nav: 0.9375rem; /* 15px — nav links and button text */
+  --fw-nav: 600;
+  --lh-nav: 1.33;
+  --ls-nav: normal;
+
+  --fs-caption: 0.875rem; /* 14px */
+  --fw-caption: 500;
+  --lh-caption: 1.43;
+  --ls-caption: normal;
+
+  --fw-caption-light: 400;
+
+  --fs-badge: 0.75rem; /* 12px */
+  --fw-badge: 600;
+  --lh-badge: 1.33;
+  --ls-badge: 0.125px; /* the only positive tracking in the system */
+
+  --fw-micro: 400;
+
+  /* Positive tracking for uppercase micro-labels (eyebrow text, section
+     kickers): capitals need air where lowercase wants tightening. */
+  --ls-caps: 0.06em;
+
+  /* User font-size preferences (design.css maps the data-font-* attributes
+     onto these; stores/design.ts owns the values). --ui-scale multiplies the
+     ROOT font size (so every rem-based type token scales together);
+     --chat-scale multiplies only the chat/transcript type on top of it. */
+  --ui-scale: 1;
+  --chat-scale: 1;
+
+  /* --- Spacing (DESIGN.md §5) ----------------------------------------- */
+  /* Base unit: 8px. Low steps are half-units; upper steps stay organic. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+
+  /* --- Radius scale (precision) --------------------------------------- */
+  /* One small, even scale — 2 / 4 / 6 / 8 / 12 — used everywhere. Linear-style
+     precision reads from crisp corners, so the old 4/5/8/12/16 ladder's odd
+     5px step is gone and every step doubles down from 2. Buttons/inputs take
+     --radius-md (6), cards --radius-lg (8), floating layers --radius-xl (12). */
+  --radius-xs: 2px; /* micro chips, tiny tags */
+  --radius-sm: 4px; /* badges, nav items, icon squares */
+  --radius-md: 6px; /* buttons, inputs, inline blocks */
+  --radius-lg: 8px; /* standard cards, panels */
+  --radius-xl: 12px; /* modals, hero panels */
+  --radius-full: 9999px; /* pills, swatches */
+
+  /* --- Elevation (precision) ------------------------------------------ */
+  /* Hairline-first depth: the 1px borders on .card/.panel/.input carry the
+     structure, and these shadows are a whisper on top of them. Two layers
+     per step — a tight contact shadow plus one soft spread — so elevation is
+     legible without the "floating paper" look, and interpolating between
+     steps stays cheap. Themes override --shadow-card/--shadow-deep with
+     palette-tinted variants. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 4%);
+  --shadow-deep: 0 16px 40px rgb(0 0 0 / 14%), 0 4px 12px rgb(0 0 0 / 8%);
+
+  /* Named elevation steps for new code; they alias the theme-overridable
+     shadow tokens so a component asks for a *step*, not a palette. The
+     hairline is the first rung: depth with no blur at all. */
+  --elev-1: var(--shadow-card);
+  --elev-2: var(--shadow-deep);
+  --elev-3: var(--shadow-deep);
+  --elev-hairline: 0 0 0 1px var(--border);
+
+  /* --- Semantic surfaces & focus ring --------------------------------- */
+  /* Surface ladder: 1 = recessed (sidebar, wells), 2 = base canvas and
+     content surfaces, 3 = raised (cards, popovers, the active pill). Mapped
+     onto the themes' three opaque tokens so "raise this one step" is
+     expressed without caring whether a palette lightens or darkens upward. */
+  --surface-1: var(--bg-subtle);
+  --surface-2: var(--bg);
+  --surface-3: var(--bg-elev);
+  /* Pointer-state tints derived from the foreground, so they work on both
+     light and dark canvases without per-theme values. */
+  --surface-hover: color-mix(in srgb, var(--fg) 4%, transparent);
+  --surface-active: color-mix(in srgb, var(--fg) 7%, transparent);
+
+  /* The border shorthand components use instead of repeating `1px solid
+     var(--border)`, and the soft focus halo (the crisp outline still does the
+     actual WCAG work; this only softens its edge). */
+  --hairline: 1px solid var(--border);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+
+  /* --- Motion ---------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* One multiplier every duration derives from, so the motion-intensity
+     preference (design.css, stores/design.ts) can scale the whole app at
+     once. The base values are the DESIGN.md reference timings. */
+  --motion-scale: 1;
+  --dur-fast: calc(120ms * var(--motion-scale));
+  --dur-med: calc(200ms * var(--motion-scale));
+  --dur-slow: calc(320ms * var(--motion-scale));
+  /* Named durations for the motion utilities (motion.css) and the
+     skeleton fade hold-off (base.css, views.css). */
+  --dur-page: calc(360ms * var(--motion-scale)); /* route/view entrance (.page-enter) */
+  --dur-skeleton-delay: calc(150ms * var(--motion-scale)); /* skeleton fade-in hold-off */
+
+  /* --- Gradient themes -------------------------------------------------- */
+  /* The two gradient themes (themes.css: nebula, lagoon) paint their wash
+     through --bg-image, which base.css applies as `background-image` on
+     <body>. The default is `none`, so every other theme is unaffected.
+     Deliberately NOT a --bg value: stores/design.ts parses --bg as a
+     concrete #rrggbb hex for the accent/badge WCAG math, so the canvas
+     color stays a hex and the decorative gradient rides separately. */
+  --bg-image: none;
+
+  /* --- Surfaces -------------------------------------------------------- */
+  /* Consumed by the optional "glass" and "aero" surface styles
+     (design.css): chrome surfaces mix --bg-elev down to --surface-alpha and
+     blur what is behind them. These are the *defaults*; the user's
+     `data-blur` / `data-translucency` attributes override them in
+     design.css. Kept here (not in design.css) so components can reuse them. */
+  --surface-blur: 14px;
+  --surface-alpha: 74%;
+
+  /* --- Z-index scale --------------------------------------------------- */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --z-tooltip: 1200;
+
+  /* --- Layout ---------------------------------------------------------- */
+  --container-max: 1200px;
+  /* Width of the labeled desktop rail (base.css). The "top" layout and the
+     mobile off-canvas drawer override the width. */
+  --sidebar-width: 232px;
+
+  /* --- Focus ring ------------------------------------------------------- */
+  --focus-ring-width: 2px;
+}

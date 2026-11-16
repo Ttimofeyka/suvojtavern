@@ -1,0 +1,400 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Chat chrome styles — pieces owned by the conversation header.
+ *
+ * Split from chat.css so the header can ship its own extras next to the
+ * component that owns them (ChatHeader imports this file side-effect
+ * only): the hidden history column and the persona picker. Everything
+ * builds on the shared layers — tokens (tokens.css), theme colors
+ * (themes.css), primitives (base.css), and keyframes/motion utilities
+ * (motion.css).
+ *
+ * House rules, per DESIGN.md:
+ *  - zero hardcoded colors — every color/border/shadow flows from theme
+ *    vars (color-mix over those vars for tints);
+ *  - animations animate transform/opacity only, on 120–320ms --dur/--ease
+ *    curves; prefers-reduced-motion is handled by the global kill in
+ *    base.css.
+ */
+
+/* === Hidden history column =================================================== */
+
+/* Chats pane hidden (a chat is open and the user hid the history column):
+   the side column collapses to a zero-footprint rail and the remaining main
+   pane takes the whole row.
+
+   visibility flips at the end of the collapse so the content is still
+   painted while the rail shrinks but leaves the a11y/tab order once it is
+   gone; the base rule (transition-delay 0) restores it immediately on
+   expand. The discrete visibility transition alone already does this, but
+   the explicit delay documents the intent.
+
+   Desktop-only (≥761px): at phone widths the history column is a slide-over
+   governed solely by .mobile-chats-open (chat.css), so the persisted
+   .chats-pane-hidden flag must not touch the drawer's width/visibility. */
+@media (min-width: 761px) {
+  .chats-layout.chats-pane-hidden .chats-side {
+    width: 0;
+    min-width: 0;
+    /* Fade the separating hairline out (color, not border shorthand, so the
+       transition above can animate it) instead of snapping it off — at width
+       0 a live border would otherwise linger as a bare line. */
+    border-right-color: transparent;
+    opacity: 0;
+    visibility: hidden;
+    /* Order matches .chats-side's transition shorthand (chat.css): opacity,
+       then visibility (held until the fade finishes). */
+    transition-delay: 0ms, var(--dur-collapse);
+  }
+}
+
+/* === Persona picker ========================================================= */
+
+/* Picker root: the position context for the dropdown menu. */
+.persona-picker {
+  position: relative;
+}
+
+/* Trigger: a pill sized to sit beside the header's other pills, carrying
+   the persona's avatar (or initial) and name. */
+.persona-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 200px;
+  padding: 3px var(--space-2) 3px 3px;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .persona-trigger:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+}
+
+/* Open state: the same accent-tinted treatment the pressed
+   .header-action toggles get. */
+.persona-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.persona-trigger-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Persona avatar circle, shared by the trigger and the menu rows: the
+   persona's image or initial, accent-tinted like every other avatar
+   circle in the app. */
+.persona-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-body-bold);
+}
+
+/* Dropdown menu: opens under the trigger, anchored to its left edge so it
+   grows rightward with the header row. Entrance is Motion (scaleVariants in
+   ChatHeader), so this file owns positioning and surface only. */
+.persona-menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: var(--hairline);
+  /* Floating menu: --radius-xl per the token scale. */
+  border-radius: var(--radius-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
+}
+
+/* Menu rows: quiet buttons; the chat's current persona reads as selected
+   (aria-selected, matching the listbox semantics). */
+.persona-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-caption);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+/* Hover tint is neutral and hover-only: on touch a sticky :hover would leave
+   the row lit after a tap (the selected state still carries the feedback). */
+@media (hover: hover) {
+  .persona-option:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* Keyboard-highlighted option (aria-activedescendant): a tint like hover so
+   arrow navigation is visible. The selected rule below outranks it in source
+   order, so the bound persona keeps its accent treatment. */
+.persona-option.is-active {
+  background: var(--surface-hover);
+}
+
+.persona-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.persona-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No-personas hint: a muted nudge toward the Personas view. */
+.persona-hint {
+  color: var(--fg-muted);
+}
+
+/* === Lorebook picker ======================================================== */
+
+/* Picker root: the position context for the dropdown menu (persona picker). */
+.lorebook-picker {
+  position: relative;
+}
+
+/* Icon-only trigger reusing the persona trigger pill's chrome. */
+.lorebook-trigger {
+  padding: 3px var(--space-2);
+}
+
+/* Dropdown menu: anchored to the trigger's left edge like the persona menu.
+ *  Fixed comfortable width; the phone-width block below re-anchors it to the
+ *  header row so it cannot run off the right side of a narrow screen. */
+.lorebook-menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 300px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: var(--hairline);
+  /* Floating menu: --radius-xl per the token scale. */
+  border-radius: var(--radius-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
+}
+
+/* Phones: the trigger sits late in a wrapping header row, so growing the
+   300px menu rightward from its left edge would push it past the viewport.
+   Anchor the menu to the row's content box instead — both edges stay on
+   screen — and leave `top: auto`, which lands it at its static position
+   directly under the trigger. */
+@media (max-width: 760px) {
+  .chat-header-row {
+    position: relative;
+  }
+
+  /* Let .chat-header-row become the absolutely positioned menu's containing
+     block. The drawer is a sibling of the row, so it keeps .chats-main. */
+  .lorebook-picker {
+    position: static;
+  }
+
+  .lorebook-menu {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+    /* Static position sits flush under the trigger; keep the popover gap. */
+    margin-top: var(--space-1);
+  }
+}
+
+/* Section headings ("Character lorebooks", "Global"). */
+.lorebook-menu-heading {
+  margin: 0;
+  padding: var(--space-1) var(--space-2) 0;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  text-transform: uppercase;
+}
+
+/* A book row: name (plus pills) on the left, the link switch on the right.
+   The row's hover tint is neutral and hover-only: on touch a sticky :hover
+   would leave the row lit after a tap. */
+.lorebook-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .lorebook-row:hover {
+    background: var(--surface-hover);
+  }
+
+  /* Global rows carry no switch (managed in Settings) — not clickable, so
+     they suppress the row hover above. Kept in the same media block so the
+     neutral tint and its reset stay gated together. */
+  .lorebook-row-static:hover {
+    background: transparent;
+  }
+}
+
+/* Global rows carry no switch (managed in Settings) — not clickable. */
+.lorebook-row-static {
+  cursor: default;
+}
+
+.lorebook-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.lorebook-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: var(--fs-caption);
+}
+
+/* "On" state label of a global row. */
+.lorebook-row-state {
+  flex: none;
+  color: var(--accent);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+}
+
+/* Empty / hint / error copy inside the menu. */
+.lorebook-menu-empty,
+.lorebook-menu-hint {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.lorebook-menu-empty a,
+.lorebook-menu-hint a {
+  color: var(--accent);
+}
+
+.lorebook-menu-error {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--danger);
+  font-size: var(--fs-caption);
+}
+
+/* === Compact status chips ================================================== */
+
+/* Wrapper for the lorebook picker + gallery trigger. `display: contents`
+   keeps desktop byte-identical: the wrapper contributes no box, so the two
+   triggers stay direct flex children of the header row. */
+.header-icon-stack {
+  display: contents;
+}
+
+/* Phones: the wrapper becomes a real flex box (contents has no layout to
+   row up), but the two icon triggers stay horizontal. A vertical stack is
+   taller than every other header control and enlarges the header even when
+   the row has room, so horizontal is the only shape that cannot add height. */
+@media (max-width: 760px) {
+  .header-icon-stack {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    flex: none;
+    gap: var(--space-1);
+  }
+}
+
+/* Generation status group: the streaming/tracker/summarizing pills, placed
+   after the header spacer so they sit in the row's free space just before the
+   budget pill and the chats/drawer toggles. An appearing/disappearing pill
+   consumes that free space instead of shifting the controls to its left. */
+.chat-header-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Icon-only status chip. Padding matches the persona/lorebook trigger so the
+   row's controls share one height; color and type come from `.pill`. */
+.status-icon {
+  padding: 3px var(--space-2);
+}
+
+/* Streaming's spinner. A fixed 700ms cycle like `.spinner` (base.css) rather
+   than one derived from --motion-scale: it conveys an in-flight request, so
+   it must keep turning when motion is "off" (design.css deliberately leaves
+   spinners out of the animation kill). Transform-only, so it stays cheap. */
+.status-icon-spin {
+  animation: spin 700ms linear infinite;
+}

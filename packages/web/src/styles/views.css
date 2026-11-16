@@ -1,0 +1,3517 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Management view styles — Characters, Lorebooks, Personas, Presets, Settings.
+ *
+ * Consumes the theme variables (themes.css), shared primitives (base.css),
+ * and the motion utilities (motion.css), so every rule here adapts to all
+ * four themes without its own color values. One sanctioned exception, the
+ * per-theme swatch gradients, mirrors the shell.css theme-swatch pattern:
+ * a swatch must preview its *target* theme whatever the current one is.
+ *
+ * Motion is transform/opacity only (compositor-friendly) and inherits the
+ * global prefers-reduced-motion kill in base.css.
+ *
+ * Loaded via the import in views/Characters.tsx (same pattern as chat.css
+ * in views/Chats.tsx); the bundler applies it app-wide.
+ */
+
+/* --- Page skeleton --------------------------------------------------------- */
+/*
+ * The precision page header: title + description on the left, actions on the
+ * right, closed off from the content by a hairline rule. It is the one header
+ * the management views (and Settings) compose, so it owns the vertical rhythm
+ * — description gap, rule, then the roomier `.page` content gap below.
+ */
+
+/* Management view root: a .stack with a roomier rhythm, so the header's rule
+   has air on both sides. Settings keeps the plain .stack. */
+.page {
+  gap: var(--space-4);
+}
+
+.page-header {
+  display: flex;
+  /* flex-start (not flex-end): a wrapped description must not drag the action
+     row off its top baseline. */
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--hairline);
+}
+
+.page-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.page-desc {
+  max-width: 68ch;
+  color: var(--fg-muted);
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  /* Push the actions to the trailing edge even once the heading wraps onto its
+     own row (space-between alone would leave them leading on that row). */
+  margin-left: auto;
+}
+
+/* --- Touch responsiveness ----------------------------------------------------- */
+/* Every tappable management control opts out of the legacy double-tap-zoom
+   delay (touch-action: manipulation) so taps register immediately. The
+   list stays class-based rather than applying to * so it never touches
+   scroll regions or text selection. */
+.chip,
+.view-toggle .btn-icon,
+.toggle-chip,
+.strategy-option,
+.timestamp-row,
+.switch,
+.segmented-item,
+.segmented-label,
+.file-button,
+.lore-main,
+.entry-card-open,
+.profile-pick,
+.char-card-open,
+.char-row-open,
+.char-dropzone,
+.preset-add,
+.persona-avatar-drop,
+.switch-row,
+.switch-option {
+  touch-action: manipulation;
+}
+
+/* --- Error banner ----------------------------------------------------------- */
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* Caution banner — same shape as the error banner, warning tint. */
+.warn-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: var(--warning);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* --- Search field (Characters, Lorebooks) ----------------------------------- */
+
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 420px;
+}
+
+.search-field .search-icon {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  color: var(--fg-faint);
+  pointer-events: none;
+}
+
+.search-field .input {
+  padding-left: 34px;
+}
+
+.chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* The tag strip owns a full toolbar row (it is the toolbar's last child). Its
+   content width swings with the tag count, so as a plain inline flex item it
+   would jump between rows — up beside the name search — whenever a search or
+   filter shrank it. A 100% basis forces it onto its own line for good. */
+.tag-filter {
+  flex: 1 1 100%;
+}
+
+/* The tag filter paginates — a bounded page of chips plus this compact pager —
+   so a cast with hundreds of tags can never stretch the toolbar. The buttons
+   ride the chip baseline at the 26px rung instead of the shared 32px one. */
+.tag-filter-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tag-filter-pager .btn-icon {
+  width: 26px;
+  height: 26px;
+  padding: 3px;
+  color: var(--fg-muted);
+}
+
+.tag-filter-count,
+.tag-filter-empty {
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+/* Mini tag search riding the chip strip. A dedicated class rather than the
+   shared `.search-field` so the toolbar's full-width mobile rule for the
+   character search never stretches it; it stays a compact, chip-height control.
+   Font-size is left to `.input` (and its 16px mobile floor against iOS focus
+   zoom) — only the box and paddings shrink. */
+.tag-filter-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 150px;
+  min-width: 110px;
+}
+
+.tag-filter-search .search-icon {
+  position: absolute;
+  left: 8px;
+  display: inline-flex;
+  color: var(--fg-faint);
+  pointer-events: none;
+}
+
+.tag-filter-search .input {
+  height: 28px;
+  padding: 0 8px 0 26px;
+}
+
+/* --- Characters: toolbar ------------------------------------------------------ */
+
+.chars-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* The order picker rides the toolbar's single-line baseline. CharacterSortSelect
+   ships the shared `.field` (caption stacked over the control), which would
+   drop its select below the chips and search box; this context lays the label
+   BESIDE the select instead. Scoped here (not on the shared component) so the
+   New Chat modal's labelled-controls row keeps its stacked layout. */
+.chars-sort.field {
+  flex-direction: row;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: var(--space-2);
+}
+
+.chars-sort .field-label {
+  white-space: nowrap;
+}
+
+.chars-sort .select {
+  width: auto;
+}
+
+/* --- View toggle (grid / list) ----------------------------------------------- */
+
+.view-toggle {
+  position: relative;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.view-toggle .btn-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+/* The glyph rides above the sliding indicator. */
+.view-toggle svg {
+  position: relative;
+  z-index: 1;
+}
+
+@media (hover: hover) {
+  .view-toggle .btn-icon:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+    transform: none;
+  }
+}
+
+.view-toggle .btn-icon:active {
+  transform: scale(0.94);
+}
+
+/* Pressed state only recolors; the fill is the shared-layout indicator that
+   Motion slides between the two buttons (see CharacterGrid). */
+.view-toggle .btn-icon[aria-pressed="true"] {
+  color: var(--fg);
+}
+
+/* The sliding selection pill: one element with a shared layoutId, rendered
+   inside whichever button is pressed, so the selection flies between grid and
+   list instead of teleporting. Reduced motion snaps it (the caller passes
+   INSTANT); the pressed color above still marks the state without it. */
+.view-toggle-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  box-shadow: var(--elev-1);
+  pointer-events: none;
+}
+
+/* --- Characters: grid cards ----------------------------------------------------- */
+
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+/* Cards are wrapped in a Motion <StaggerItem> div so their rise-in is
+   JS-driven: the card carries `content-visibility: auto`, which can skip or
+   delay a one-shot CSS animation for an off-screen card, but the wrapper
+   always renders and animates. The wrapper must still fill its grid cell so
+   the card stretches and the equal-height action rows keep aligning. */
+.char-grid > .stagger-item {
+  display: grid;
+}
+
+/* .stagger (motion-primitives.css) sets display: contents, which would collapse
+   the grid; re-assert it on the compound selector so stylesheet order cannot
+   win (mirrors lorebooks.css's .lore-list.stagger). */
+.char-grid.stagger {
+  display: grid;
+}
+
+.char-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  /* No overflow: hidden here — it would clip the .card-hover ::after
+     shadow layer, which paints outside the card. The media's top corners
+     are rounded on .char-card-media instead. */
+}
+
+/* Management cards ride the shared .card-hover lift, but with a springier,
+   quicker transform leg so the lift reads as a press-and-release. The
+   color legs keep the base easing and duration. */
+.char-card.card-hover,
+.char-row.card-hover,
+.lore-card.card-hover,
+.persona-card.card-hover,
+.preset-card.card-hover {
+  transition:
+    transform var(--dur-med) var(--ease-spring),
+    background-color var(--dur-slow) var(--ease-in-out),
+    border-color var(--dur-slow) var(--ease-in-out),
+    color var(--dur-slow) var(--ease-in-out);
+}
+
+/* The whole media + text block opens the editor. */
+.char-card-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.char-card-open:active {
+  transform: scale(0.98);
+}
+
+.char-card-media {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  /* Matches .card's inner curve (radius-lg minus its 1px border), so the
+     square avatar still reads as rounded into the card's top corners. */
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+  border-bottom: var(--hairline);
+}
+
+.avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .char-card:hover .avatar-image {
+    transform: scale(1.03);
+  }
+}
+
+.char-card:focus-within .avatar-image {
+  transform: scale(1.03);
+}
+
+.avatar-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-subtle);
+  color: var(--fg-faint);
+  font-size: 2rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.char-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+}
+
+.char-name,
+.char-row-name {
+  overflow-wrap: anywhere;
+}
+
+.char-card-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--fg-muted);
+  /* Chat counts are data: fixed-width digits keep the meta line from reflowing
+     as the count changes. */
+  font-variant-numeric: var(--fvn-tabular);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* A row's meta is one line; the card's is clamped to two (above). */
+.char-row .char-card-meta {
+  -webkit-line-clamp: 1;
+}
+
+/* Five icon actions (start, gallery, both exports, delete). Keep the strip on
+   one line: a wrapped second row would make the card taller than its neighbours
+   and break the grid's even action-row alignment. The five 32px squares plus
+   their gaps fit the narrowest card (the 2-column layout at the 761px shell
+   breakpoint leaves ~296px of strip width for ~176px of controls). */
+.char-card-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+/* Grid cards close with a hairline control strip pinned to the bottom edge
+   (margin-top: auto), so equal-height cards align their action rows. The list
+   variant keeps the actions inline beside the body. */
+.char-card .char-card-actions {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+/* --- Characters: list rows ------------------------------------------------------- */
+
+.char-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Same load-order guard as .char-grid.stagger. */
+.char-list.stagger {
+  display: flex;
+}
+
+.char-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.char-row-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-1);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.char-row-open:active {
+  transform: scale(0.98);
+}
+
+.char-row-name {
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
+  line-height: var(--lh-nav);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative accent tint on the row name; the row is a button and stays
+   actionable without it, so it is gated to real hover devices. */
+@media (hover: hover) {
+  .char-row-open:hover .char-row-name {
+    color: var(--accent);
+  }
+}
+
+.char-row-avatar {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative avatar border tint; gated to real hover devices like the name. */
+@media (hover: hover) {
+  .char-row-open:hover .char-row-avatar {
+    border-color: var(--border-strong);
+  }
+}
+
+.char-row-avatar .avatar-fallback {
+  font-size: 1.125rem;
+}
+
+.char-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* --- Characters: long-list rendering hooks ------------------------------------ */
+
+/* The paged grid can hold thousands of rows. `content-visibility: auto` lets
+   the browser skip layout/paint for off-screen cards (the scroll appends pages
+   without paying for every card), while `contain-intrinsic-size: auto <h>`
+   supplies a placeholder height per card so the scrollbar stays stable before a
+   card is first rendered — `auto` remembers the real measured height after the
+   first paint. 480px matches a card at the default 3-column desktop layout
+   (a ~376px square media + body + action row); the row's is its measured 70px.
+   The card's square media scales with its column, so narrower layouts (2 then
+   1 column) make taller cards — see the per-breakpoint overrides below. */
+.char-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
+}
+
+.char-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 70px;
+}
+
+/* The square media means a card's height grows as the grid drops columns
+   (a wider column → taller card) and shrinks again as the viewport narrows
+   past the sidebar-drawer breakpoint, so the 3-column 480px placeholder
+   badly under-estimates at 2 and 1 column and the scrollbar would jump as
+   each card is first measured. Track the grid's own column breakpoints
+   (defined at the bottom of this file), using the largest measured card in
+   each range so the placeholder errs high: reserving too much shrinks the
+   scrollbar once the card is measured, while reserving too little makes the
+   content jump under it, which is worse. Measurements disable
+   content-visibility so every card reports its real height. */
+@media (max-width: 1000px) {
+  /* 2 columns; tallest measured ~495px (at a 1000px viewport). */
+  .char-card {
+    contain-intrinsic-size: auto 500px;
+  }
+}
+
+@media (max-width: 700px) {
+  /* 1 column; tallest measured ~754px (at a 700px viewport). */
+  .char-card {
+    contain-intrinsic-size: auto 760px;
+  }
+}
+
+@media (max-width: 600px) {
+  /* 1 column again, but a narrower media box; tallest measured ~654px. */
+  .char-card {
+    contain-intrinsic-size: auto 660px;
+  }
+}
+
+/* `content-visibility: auto` applies paint containment PERMANENTLY — spec
+   §4.3: when the value is `auto`, layout, style and paint containment persist
+   even while the element is on screen, not only while it is skipped. Paint
+   containment clips the card's contents (its descendants, which include the
+   `.card-hover::after` pseudo-element that paints the elevation shadow outside
+   the border box), so an on-screen hovered card would lose its shadow. Dropping
+   `content-visibility` for that one card restores descendant paint; it is cheap
+   since the card is, by definition, on screen. Off-screen cards keep skipping. */
+.char-card:hover,
+.char-card:focus-within,
+.char-row:hover,
+.char-row:focus-within {
+  content-visibility: visible;
+}
+
+/* --- Characters: load-more footer --------------------------------------------- */
+
+.char-list-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  /* A full-width rule closes the grid, so the footer reads as the list's end
+     rather than one more row. */
+  border-top: var(--hairline);
+}
+
+/* One-pixel-tall scroll tripwire observed by CharacterListMore; the 300px
+   rootMargin makes it fire before the user actually reaches the bottom. */
+.char-list-more-sentinel {
+  height: 1px;
+  width: 100%;
+}
+
+.char-list-more-status {
+  text-align: center;
+  /* A count is data: fixed-width digits stop the caption jittering as pages
+     load in. */
+  font-variant-numeric: var(--fvn-tabular);
+}
+
+/* --- Characters: discrete page nav (management screen / pickers) --------------- */
+
+/* Mirrors the lorebook editor's .entry-pagination: prev/next flanking the
+   "Page N of M" status, with the range caption pushed to the trailing edge.
+   Wraps into two rows on narrow sheets. */
+.char-page-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding-top: var(--space-1);
+}
+
+.char-page-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.char-page-status {
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.char-page-range {
+  margin-left: auto;
+}
+
+/* --- Loading skeletons -------------------------------------------------------------- */
+
+/* Skeleton card containers share the .skeleton delayed entry (base.css):
+   their card chrome (background, border, shadow) must also stay invisible
+   for the first 150ms, or quick loads flash empty card outlines. */
+.skeleton-row,
+.char-skeleton {
+  animation: fade-in var(--dur-med) var(--ease-out) var(--dur-skeleton-delay) backwards;
+}
+
+.char-skeleton {
+  gap: var(--space-2);
+}
+
+.char-skeleton-media {
+  aspect-ratio: 1;
+  /* Same top-corner rounding as .char-card-media — the card no longer
+     clips full-bleed children into its corners (see .char-card). */
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+}
+
+.char-skeleton-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.skeleton-line {
+  height: 12px;
+  /* Micro radius, not a pill: the precision skeleton shares the card's sharp
+     corner language. */
+  border-radius: var(--radius-xs);
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.skeleton-avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+}
+
+/* A persona avatar is a circle in the real card, so its skeleton is too.
+   (The lorebook row reuses .skeleton-avatar as a rounded square.) */
+.persona-card .skeleton-avatar {
+  border-radius: var(--radius-full);
+}
+
+.skeleton-row-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Placeholder for a card's control strip, so a skeleton matches the final card
+   shape (media + body + actions) instead of collapsing short. */
+.char-skeleton-actions,
+.skeleton-row-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+.char-skeleton-actions {
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.skeleton-action {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+/* --- Empty state container ------------------------------------------------------------ */
+
+.empty-card {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  /* The recessed rung of the surface ladder: an empty view reads as a
+     deliberate well rather than a missing card. */
+  background: var(--surface-1);
+}
+
+.empty-card .empty-state {
+  padding: var(--space-8) var(--space-4);
+}
+
+/* Optional action row under an empty-state's hint (e.g. "Clear filters"),
+   centered with the rest of the block. */
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+/* --- Sectioned forms (modals) -------------------------------------------------------- */
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.form-section-title {
+  padding: 0 2px;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  text-transform: uppercase;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.form-section .field-grid .field {
+  min-width: 0;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* --- File picker buttons (label + hidden input) ---------------------------------------- */
+
+.file-hidden {
+  display: none;
+}
+
+/* The label-wrapped picker: labels get no button cursor from the browser,
+   and its hover stays quiet like .btn-ghost — underline instead of the
+   scale lift the base .btn would give it. */
+.file-button {
+  cursor: pointer;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+/* The underline is decoration (the whole label is the click target), so it
+   is gated behind (hover: hover) like the rest of the quiet hovers. */
+@media (hover: hover) {
+  .file-button:hover {
+    text-decoration: underline;
+    transform: none;
+  }
+}
+
+.file-button:active {
+  transform: scale(0.98);
+}
+
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* --- Character gallery -------------------------------------------------------------------- */
+
+.gallery-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.gallery-tile {
+  position: relative;
+  aspect-ratio: 1;
+  margin: 0;
+  overflow: hidden;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.gallery-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .gallery-tile:hover img {
+    transform: scale(1.04);
+  }
+}
+
+.gallery-tile-missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--fg-faint);
+}
+
+.gallery-tile-badge {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+}
+
+.gallery-tile-overlay {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity var(--dur-med) var(--ease-out),
+    transform var(--dur-med) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .gallery-tile:hover .gallery-tile-overlay {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.gallery-tile:focus-within .gallery-tile-overlay {
+  opacity: 1;
+  transform: none;
+}
+
+/* Touch devices have no hover — keep the actions reachable. */
+@media (hover: none) {
+  .gallery-tile-overlay {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Full-bleed press target over the tile image. The <img> keeps its
+   width/height:100% + object-fit:cover, so the picture fills exactly as
+   before; the button only adds the zoom affordance and keyboard access. */
+.gallery-tile-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+}
+
+/* The tile clips (overflow: hidden), so the global 2px-offset focus ring
+   would be cut off; pull it inside instead of inventing a new treatment. */
+.gallery-tile-open:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+/* --- Image lightbox ------------------------------------------------------------------------ */
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above the gallery modal: the viewer is opened from inside it. */
+  z-index: calc(var(--z-modal) + 1);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  /* A touch stronger than the modal scrim so the image reads as the focus. */
+  background: color-mix(in srgb, var(--scrim) 92%, transparent);
+  backdrop-filter: blur(4px);
+  cursor: zoom-out;
+  animation: fade-in var(--dur-fast) var(--ease-out);
+}
+
+.lightbox-panel {
+  position: relative;
+  display: grid;
+  place-items: center;
+  max-width: 100%;
+  max-height: 100%;
+  /* The panel is a no-op surface (backdrop clicks close via target check),
+     so keep the overlay's zoom-out cursor off the image itself. */
+  cursor: default;
+  animation: scale-in var(--dur-med) var(--ease-spring);
+}
+
+.lightbox-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  /* Contain-fit at the largest size that still clears the overlay padding;
+     never upscales a smaller source past its natural size. */
+  max-height: calc(100dvh - var(--space-6));
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-deep);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  /* The default .btn fill is only 5% --fg — invisible over a bright image.
+     Use the same blurred surface the tile overlay uses so the button stays
+     legible (and tappable) whatever the picture behind it. */
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+@media (max-width: 760px) {
+  /* Mirror the modal sheets: no gutter, so the image can use the full
+     screen. The slight width/height reduction keeps the picture off the
+     screen edges (and clear of the close button's corner). */
+  .lightbox-overlay {
+    padding: 0;
+  }
+
+  .lightbox-image {
+    max-height: calc(100dvh - var(--space-7));
+    border-radius: 0;
+  }
+}
+
+/* --- Import modal ------------------------------------------------------------------------- */
+
+.transfer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline);
+}
+
+.transfer-section:last-of-type {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* The import modal's sections are COLUMN flex boxes, where the toolbar
+   .search-field's `flex: 1 1 220px` would resolve its basis to 220px of
+   HEIGHT — a large empty gap. Neutralize the grow/basis so it keeps its
+   natural height and spans the section. */
+.transfer-section .search-field {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.transfer-title {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.transfer-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.transfer-row .select {
+  flex: 1;
+  min-width: 160px;
+}
+
+.transfer-msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* --- Purge modal --------------------------------------------------------------------------- */
+
+.purge-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.purge-warning-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--danger);
+}
+
+.purge-warning-title {
+  font-weight: var(--fw-body-semibold);
+}
+
+/* --- Lorebooks: list -------------------------------------------------------------------------- */
+
+.lore-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lore-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.lore-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative icon border tint; gated to real hover devices. */
+@media (hover: hover) {
+  .lore-card:hover .lore-icon {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+}
+
+.lore-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.lore-main:active {
+  transform: scale(0.99);
+}
+
+.lore-name {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative name tint on hover; gated so a touch tap does not leave it
+   sticking to the last-opened row. */
+@media (hover: hover) {
+  .lore-main:hover .lore-name {
+    color: var(--accent);
+  }
+}
+
+.lore-desc {
+  overflow: hidden;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Trailing card controls, grouped so mobile can move them as one row.
+   flex: none keeps them from stealing width from .lore-main on desktop. The
+   gap matches every other card action strip (.preset-actions,
+   .entry-card-tools). */
+.lore-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-1);
+}
+
+/* The entry-count pill's digits are numeric data; it opts into the shared
+   `.tnum` class in the markup, not a per-selector font-variant rule. */
+
+/* Per-card busy affordance while the book's detail loads for the editor:
+   dim the card and spin, mirroring the character card's load state. */
+.lore-card-busy {
+  cursor: progress;
+}
+
+.lore-card-spinner {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  /* Purely visual: the card's controls stay clickable while the detail loads
+     (a second open is a no-op), matching the character card's busy overlay. */
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+}
+
+/* --- Lorebook editor: entry grid + cards ------------------------------------------------------ */
+
+.entry-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Entries as a compact card grid instead of full-width rows: the xl modal's
+   ~1100px body fits three ~340px columns, which keeps a 5-key card legible
+   while showing ~3x as many entries per screen as the old single column. */
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+/* Two columns once the modal is no longer wide enough for three comfortable
+   ~340px cards; one column on phones (the same 760px breakpoint the modal
+   itself goes full-screen at, in base.css). */
+@media (max-width: 1000px) {
+  .entry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .entry-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The `.entry-card` surface lives in lorebooks.css (`.entry-page .entry-card`):
+   the entry card only ever renders inside the entry page, so its shape,
+   hover-lift and disabled state are defined once, next to those state rules,
+   instead of competing with a base definition here. */
+
+/* The label + keys block is the card's edit affordance; the tools column
+   sits beside it without stealing its width. align-items: flex-start keeps
+   the tools pinned to the top when the label wraps to two lines. */
+.entry-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The toggle chip keeps its own circle styling: it is the one control that
+   shows enabled/disabled state at a glance. Sized to the shared 32px icon
+   button so it is a comfortable target and the tools column stays even. */
+.toggle-chip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--fg-faint);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out),
+    transform var(--dur-med) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .toggle-chip:hover {
+    border-color: var(--fg-faint);
+    transform: scale(1.06);
+  }
+}
+
+.toggle-chip:active {
+  transform: scale(0.94);
+}
+
+.toggle-chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.entry-card-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.entry-card-open:active {
+  transform: scale(0.99);
+}
+
+.entry-label {
+  overflow: hidden;
+  font-weight: var(--fw-body-semibold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative label tint; gated so a touch tap does not leave it stuck. */
+@media (hover: hover) {
+  .entry-card-open:hover .entry-label {
+    color: var(--accent);
+  }
+}
+
+.entry-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.entry-keys .badge {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The "+N" overflow chip reads as a marker, not another key: muted so it does
+   not compete with the real badges. Its own tooltip lists the hidden keys. */
+.entry-keys .entry-key-more {
+  flex: none;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg-muted);
+}
+
+.entry-card-tools {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-1);
+}
+
+/* The enriched, one-line meta summary; ellipsised rather than wrapped so
+   every card keeps the same height. The row keeps the summary and its Info
+   button on one line, with the meta text free to shrink. */
+.entry-meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.entry-meta {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- Lorebook editor: pagination ------------------------------------------------------------- */
+
+/* One row: page-size picker, prev/next, then the range caption pushed right.
+   Wraps into two balanced rows on narrow modals. */
+.entry-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding-top: var(--space-1);
+}
+
+.entry-page-size-label {
+  flex: none;
+}
+
+.entry-page-size {
+  flex: none;
+  width: auto;
+  /* The generic .select is width: 100%; a compact inline picker overrides only
+     its width and the right pad for the native dropdown arrow, so it inherits
+     the shared control padding/height (base.css) rather than restating it. */
+  padding-right: 28px;
+}
+
+.entry-page-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.entry-page-status {
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.entry-page-range {
+  margin-left: auto;
+}
+
+/* --- Lorebook editor: sections (organizational entry groups) --------------------------------- */
+
+/* A render block: a section (header + body) or the ungrouped bucket. Blocks
+   stack vertically; the cards inside each reuse .entry-grid so a section keeps
+   the 3/2/1-column responsive behavior. */
+.entry-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.entry-section {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.entry-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The collapse toggle: a chevron button. It only rotates, so the state change
+   is a compositor-friendly transform (DESIGN.md). The padding gives it a real
+   hit target (was ~2px) and its hover uses the same neutral fill as the other
+   disclosure triggers. */
+.entry-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .entry-section-toggle:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.entry-section-chevron {
+  display: inline-flex;
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.entry-section-toggle[aria-expanded="true"] .entry-section-chevron {
+  transform: rotate(180deg);
+}
+
+/* The inline rename field reads as a heading, not a form control: no chrome
+   until it is hovered/focused, so a section header does not look like a form. */
+.entry-section-name {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border-color: transparent;
+  background: transparent;
+  font-weight: var(--fw-body-semibold);
+}
+
+/* The generic `.input:focus` rule (base.css) sets an accent border, but this
+   overrides want to stay quiet; hover only, focus keeps the house ring. */
+@media (hover: hover) {
+  .entry-section-name:hover {
+    border-color: var(--border);
+  }
+}
+
+.entry-section-count {
+  flex: none;
+}
+
+.entry-section-tools {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-1);
+}
+
+/* The section-scoped Add entry button is denser than a top-level .btn: it
+   sits in a header row beside 32px icon buttons. */
+.btn-section-add {
+  padding: 6px 10px;
+  font-size: var(--fs-caption);
+}
+
+/* The section body's spacing rides the grid INSIDE the Collapsible's clip box
+   (`.entry-section-body .collapsible-inner > .entry-grid` in lorebooks.css):
+   the grid is never a direct child of the wrapper, so no rule belongs here. */
+
+/* The ungrouped header exists only when the book has sections (see the
+   editor); a sectionless book renders one flat grid with no header at all.
+   Flex like .entry-heading so its Info button baselines with the label. */
+.entry-ungrouped-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--ls-badge);
+}
+
+/* --- Inline info affordance (lorebook tooltips) --------------------------------------------- */
+
+/* An <button> (natively focusable, so lib/tooltip.ts shows its data-tip on
+   :focus-visible too, and clicking it cannot trigger an enclosing <label>).
+   Chrome-free and baseline-aligned inside headings and field labels; the
+   house focus ring in base.css covers keyboard users. Padding + an equal
+   negative margin grow the hit area (the glyph is only ~13px) without moving
+   the icon, so this affordance is reachable by pointer and touch. */
+.info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: var(--space-1);
+  margin: calc(-1 * var(--space-1));
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg-faint);
+  cursor: help;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .info-tip:hover {
+    color: var(--fg);
+  }
+}
+
+.info-tip:focus-visible {
+  border-radius: var(--radius-sm);
+}
+
+/* --- Personas ------------------------------------------------------------------------------------ */
+
+.persona-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+/* Motion <StaggerItem> wrappers (see .char-grid) must fill their grid cell so
+   the card stretches to the row's even height. */
+.persona-grid > .stagger-item {
+  display: grid;
+}
+
+/* Same load-order guard as .char-grid.stagger. */
+.persona-grid.stagger {
+  display: grid;
+}
+
+.persona-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.persona-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative avatar border tint; gated to real hover devices. */
+@media (hover: hover) {
+  .persona-card:hover .persona-avatar {
+    border-color: var(--border-strong);
+  }
+}
+
+.persona-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.persona-title-row {
+  gap: var(--space-2);
+}
+
+.persona-name {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
+  line-height: var(--lh-nav);
+}
+
+.persona-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--fg-muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: pre-line;
+}
+
+.persona-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+/* The default-star toggle. Shared vocabulary: despite living in the Personas
+   section this class is consumed by the Presets view's default-star button
+   (views/Presets.tsx), so do not rename it in the Personas batch. */
+.persona-star[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+}
+
+@media (hover: hover) {
+  .persona-star[aria-pressed="true"]:hover {
+    background: color-mix(in srgb, var(--warning) 20%, transparent);
+  }
+}
+
+/* Persona editor avatar picker: a click-to-select label (hidden file input
+   inside) doubling as a drop target. It is the SAME drop-zone idiom as
+   .char-dropzone in characters.css — dashed var(--border-strong) hairline, the
+   lg radius, the neutral hover tint, and the `.is-over` drag state — so the two
+   surfaces cannot drift. Only the internal layout differs (preview beside the
+   caption here, an icon over the caption there). */
+.persona-avatar-drop {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .persona-avatar-drop:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* While a drag hovers the zone. */
+.persona-avatar-drop.is-over {
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg));
+}
+
+/* Like .persona-avatar, but larger for the editor. */
+.persona-avatar-preview {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--fg-muted);
+}
+
+/* --- Presets --------------------------------------------------------------------------------------- */
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+/* Cards are wrapped in a Motion <StaggerItem>, so the rise-in is JS-driven
+   (mirrors the Characters / Personas / Lorebooks grids). The wrapper fills its
+   grid cell so the card stretches and equal-height cards stay aligned; the
+   compound `.stagger` rule defeats motion-primitives' display:contents. */
+.preset-grid > .stagger-item {
+  display: grid;
+}
+
+.preset-grid.stagger {
+  display: grid;
+}
+
+/* The icon + name/description block is one button that opens the editor —
+   the same "click the card body" affordance the lorebook rows use. */
+.preset-card-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.preset-card-open:active {
+  transform: scale(0.99);
+}
+
+/* Decorative name tint on hover, mirroring the lorebook row; gated so a touch
+   tap does not leave it sticking. */
+@media (hover: hover) {
+  .preset-card-open:hover .preset-name {
+    color: var(--accent);
+  }
+}
+
+/* Matches the real `.preset-icon` (40px) — NOT the 44px `.skeleton-avatar`,
+   which mirrors the round avatar cards. */
+.preset-skeleton-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+}
+
+.preset-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.preset-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative icon border tint; gated to real hover devices. */
+@media (hover: hover) {
+  .preset-card:hover .preset-icon {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+}
+
+.preset-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.preset-name {
+  overflow: hidden;
+  font-size: var(--fs-nav);
+  font-weight: var(--fw-nav);
+  line-height: var(--lh-nav);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preset-desc {
+  color: var(--fg-muted);
+}
+
+.preset-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+/* Card controls block. Its own full-width row (the card wraps) so expanding
+   it grows the card downward instead of squeezing the name/actions row — a
+   grid row's height is set by its tallest card, so a collapse/expand here
+   never reflows the icon and buttons beside it. */
+.preset-card-controls {
+  flex-basis: 100%;
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+/* The summary is a real button (aria-expanded/aria-controls), styled as the
+   quiet caption row it reads as. */
+.preset-controls-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  border: none;
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .preset-controls-toggle:hover {
+    color: var(--fg);
+  }
+}
+
+/* The chevron only rotates — compositor-friendly, per DESIGN.md. */
+.preset-controls-chevron {
+  display: inline-flex;
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.preset-controls-toggle[aria-expanded="true"] .preset-controls-chevron {
+  transform: rotate(180deg);
+}
+
+.preset-controls-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.preset-controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-controls-row-main {
+  display: flex;
+  flex: 1 1 140px;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.preset-controls-label {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg);
+}
+
+.preset-controls-desc {
+  font-size: var(--fs-badge);
+}
+
+.preset-controls-select {
+  flex: none;
+  width: auto;
+  min-width: 140px;
+}
+
+.preset-controls-switch {
+  flex: none;
+}
+
+/* The label for a switch's current position: the track alone cannot say what
+   "on" means, so the option in effect is named beside it. */
+.preset-controls-state {
+  flex: none;
+  font-size: var(--fs-badge);
+}
+
+/* --- Preset editor: the prompt pipeline ------------------------------------------------------------------ */
+/* The pipeline is the whole generation flow as an ordered list of rows:
+   marker "slots" (ghost, dashed — fixed pipeline positions) and regular
+   prompt cards. Rows carry a head (identity + controls) and an optional
+   expanded body (content textarea + advanced injection settings). */
+
+.preset-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Semantic <ol>: native chrome stripped, rows keep their gap. */
+.preset-pipeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preset-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.preset-row-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.preset-row-name {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-medium);
+}
+
+.preset-row-desc {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.preset-row-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* A row whose flag a UI control owns: the switch is disabled (the control's
+   choice decides it) and an Info button right beside it explains why. Grouped
+   so the pair reads as one affordance — the row head's own gap would strand
+   the explanation from the switch it describes. No extra disabled styling is
+   needed: .switch-input:disabled already dims the track, and the explanation
+   button keeps the row from reading as merely broken. */
+.preset-governed-switch {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Shared by both row kinds: the chevron flips while its row is open. */
+.preset-expand svg {
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.preset-expand[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+/* Marker slot — ghost row: dashed whisper border, subtle fill, pill badge. */
+.preset-row-marker {
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.preset-marker-badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  text-transform: uppercase;
+}
+
+/* Group membership pill on a row head — an accent tint distinguishes it from
+   the neutral "Slot" badge above. Not uppercased: group labels are user-facing
+   sentences ("Point of view"), unlike the fixed slot marker. */
+.preset-group-badge {
+  flex: none;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A row a UI control switches: same pill shape as the group badge but tinted
+   toward the warning family, because it is the one fact that OVERRIDES the
+   row's own switch. The two badges can appear on one row (different facts). */
+.preset-control-badge {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+
+/* --- Preset editor: mutually-exclusive groups --------------------------------------------- */
+
+.preset-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.preset-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.preset-group-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-group-label {
+  flex: 1 1 140px;
+  overflow: hidden;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  color: var(--fg);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preset-group-select {
+  flex: none;
+  width: auto;
+  min-width: 160px;
+}
+
+/* An invalid hand-edited state (zero or several members on): tint the row and
+   keep the warning inline, right of the select. */
+.preset-group-row.is-unset .preset-group-label {
+  color: var(--warning);
+}
+
+.preset-group-warn {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 100%;
+  gap: 5px;
+  color: var(--warning);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* --- Preset editor: UI controls (authoring) ----------------------------------------------- */
+/* The declarations behind the switchers users flip on the Presets page. The
+   section sits between the Groups chooser and the pipeline because a control
+   names pipeline ROWS. */
+
+.preset-control-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* One control — a real .card, so a nested group of rows reads as a unit. */
+.preset-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.preset-control-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-control-index {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.preset-control-id {
+  flex: 0 1 140px;
+  min-width: 100px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.preset-control-label {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.preset-control-type {
+  flex: none;
+  width: auto;
+}
+
+.preset-control-options-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-control-link-group {
+  flex: none;
+  width: auto;
+  min-width: 150px;
+  font-size: var(--fs-caption);
+}
+
+.preset-control-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* One option — recessed so the control card still reads as the outer unit. */
+.preset-control-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.preset-control-option-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-control-option-id {
+  flex: 0 1 130px;
+  min-width: 100px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.preset-control-option-label {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.preset-control-option-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--space-2) var(--space-3);
+  align-items: start;
+}
+
+/* The pipeline rows this option switches on. Bounded and scrollable so a long
+   pipeline never pushes the rest of the control out of view — sharing the
+   `.lorebook-picker-list` constants (gap, cap, padding, hairline) so every
+   picker list in the app reads as the same control. */
+.preset-control-prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.preset-control-prompt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.preset-control-prompt-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The row id: what a stored choice stores, so a hand-editor can match a
+   checkbox here to the pipeline JSON. */
+.preset-control-prompt-id {
+  flex: none;
+  margin-left: auto;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+}
+
+.preset-control-foot {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-control-add-option {
+  flex: none;
+}
+
+.preset-control-default {
+  flex: 0 1 220px;
+  min-width: 160px;
+}
+
+/* --- Preset editor: generation-type triggers ----------------------------------------------- */
+
+.preset-triggers {
+  gap: var(--space-2);
+}
+
+.preset-trigger-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+
+.preset-trigger-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.preset-trigger-check {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* A ticked option reads as active copy, matching the checkbox state. */
+.preset-trigger-option.is-on .preset-trigger-label {
+  color: var(--fg);
+}
+
+.preset-trigger-unknown {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+/* The imported-value chip reads as a removable token, not an action button:
+   muted, with the X icon signalling removal on click. */
+.preset-trigger-unknown-chip {
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* Regular prompt — a denser .card (surface comes from .card). */
+.preset-row-prompt {
+  padding: var(--space-3);
+}
+
+.preset-prompt-name {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.preset-prompt-role {
+  flex: none;
+}
+
+/* Expanded body under a row head. */
+.preset-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+/* Content textarea — monospace and generous when expanded. */
+.preset-content {
+  min-height: 148px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* Advanced details block (mirrors the lorebook entry editor pattern). */
+.preset-advanced {
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.preset-advanced summary {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  cursor: pointer;
+  user-select: none;
+  list-style-position: inside;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .preset-advanced summary:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.preset-advanced[open] summary {
+  border-bottom: var(--hairline);
+}
+
+.preset-advanced .preset-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+/* Add-prompt affordance — a dashed drop-zone row closing the pipeline. */
+.preset-add {
+  justify-content: center;
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--fg-muted);
+}
+
+@media (hover: hover) {
+  .preset-add:hover {
+    background: var(--surface-hover);
+    color: var(--fg);
+  }
+}
+
+.preset-add:active {
+  transform: scale(0.99);
+}
+
+/* Disabled rows recede: text and controls dim, the toggle stays actionable. */
+.preset-row.is-off .preset-row-main,
+.preset-row.is-off .preset-prompt-name,
+.preset-row.is-off .preset-prompt-role {
+  opacity: 0.55;
+}
+
+/* --- Preset editor: structured sections (precision retune) ----------------------------------------- */
+/* The editor is one sticky header over three collapsible sections (Generation
+   / Prompts / Controls). Hairline structure, layered surfaces, and motion via
+   transform/opacity only — the section disclosure itself is the house
+   Collapsible (components/ui/collapsible), a scoped height exception. */
+
+.preset-editor {
+  /* Wider rhythm than .stack so the header and the three cards read apart. */
+  gap: var(--space-4);
+}
+
+/* Sticky header: identity, dirty/valid state and the save actions. The Modal
+   panel scrolls (wide panels scroll in .modal-panel, not .modal-body), so this
+   pins to that scrollport at top: 0 — no negative vertical offset, which would
+   push the first row of content behind the panel edge. The horizontal negative
+   margins bleed the bar across the panel's own padding so scrolled content
+   never shows beside it. */
+.preset-editor-head {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--hairline);
+  background: var(--surface-3);
+}
+
+.preset-editor-fields {
+  gap: var(--space-2) var(--space-4);
+}
+
+.preset-editor-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
+.preset-editor-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.preset-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* One card per section: quiet uppercase head (the trigger), panel body. */
+.preset-section {
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.preset-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* The whole title is the trigger; the chevron is decoration, the Info button
+   is a sibling so the trigger's accessible name stays the title alone. */
+.preset-section-toggle {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-body-semibold);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* Same neutral hover fill as the other disclosure triggers. */
+@media (hover: hover) {
+  .preset-section-toggle:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.preset-section-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--fg-faint);
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+/* Open state keys off the trigger's own aria-expanded (the shared disclosure
+   mechanism), not a parallel class on the section wrapper. */
+.preset-section-toggle[aria-expanded="true"] .preset-section-chevron {
+  transform: rotate(180deg);
+}
+
+.preset-section-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Counts are data: the span opts into the shared `.tnum` class so the digits
+   keep fixed widths as rows change. */
+.preset-section-meta {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+}
+
+.preset-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: var(--hairline);
+}
+
+/* --- Preset editor: the reorderable pipeline ------------------------------------------------ */
+/* The pipeline rides ReorderableList's Motion Reorder, but the editor's row
+   card is the visual, so the wrapper is made transparent and the drag grip
+   floats in the card's left gutter. The built-in move buttons are hidden in
+   favour of the row's own — those carry the row's name in their accessible
+   labels, which a generic list-level button cannot. */
+
+.preset-pipeline-reorder {
+  gap: var(--space-2);
+}
+
+.preset-pipeline-reorder .reorder-item {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+/* Positioning (not transform) so the grip never competes with the row's own
+   Motion transforms and stays clear of the card's content. */
+.preset-pipeline-reorder .reorder-grip {
+  position: absolute;
+  top: 6px;
+  left: 2px;
+  z-index: 1;
+}
+
+.preset-pipeline-reorder .reorder-actions {
+  display: none;
+}
+
+.preset-pipeline-reorder .reorder-body {
+  width: 100%;
+}
+
+/* Clear the floating grip for both row flavours. */
+.preset-pipeline-reorder .preset-row-prompt,
+.preset-pipeline-reorder .preset-row-marker {
+  padding-left: 38px;
+}
+
+/* Inline prompt-name error sits just under the head, not on the flex baseline. */
+.preset-row-error {
+  margin-top: calc(-1 * var(--space-1));
+}
+
+/* Prefix-cache note on one pipeline row. Shares .preset-group-warn's tone and
+   type so the editor speaks one warning language; only the indent differs, so
+   it lines up with the row's own content instead of the reorder grip. */
+.preset-row-warn {
+  margin-top: calc(-1 * var(--space-1));
+  padding-left: 38px;
+}
+
+/* --- Preset editor: control cards --------------------------------------------------------- */
+/* A control's identity row stays visible; its options live behind the same
+   Collapsible used by the sections. popLayout (components/ui/presence) lifts an
+   exiting card/option out of flow, so these lists must be positioned. */
+
+.preset-control-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.preset-control-list,
+.preset-control-options {
+  position: relative;
+}
+
+.preset-control-options .preset-control-option {
+  position: relative;
+}
+
+/* --- Import preset: armed file + busy spinner --------------------------------------------- */
+
+/* The sections here are wrapped in StaggerItems, so each is the only
+   `.transfer-section` under its own parent and the shared `:last-of-type` rule
+   (line ~915) would strip every divider. Restore it, then drop it only on the
+   final wrapper. Equal specificity, later in the sheet, so this wins. */
+.preset-import .transfer-section {
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline);
+}
+
+.preset-import .stagger-item:last-child .transfer-section {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* The armed-file chip (name beside its clear button) that Presence animates. */
+.transfer-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.transfer-file .caption {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The busy spinner rides the accent button, where the default accent-on-accent
+   ring would vanish — invert it against the button's foreground. */
+.btn-primary .spinner {
+  border-color: color-mix(in srgb, var(--accent-fg) 30%, transparent);
+  border-top-color: var(--accent-fg);
+}
+
+/* --- Steppers (shared: NumberStepper, components/settings/Stepper.tsx) ----- */
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+
+.stepper .input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 32px square: meets the touch-target floor while staying compact in a row
+   (the previous 30px was just under it). */
+.stepper-btn {
+  flex: none;
+  width: 32px;
+  padding: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+  line-height: 1;
+}
+
+/* --- Settings: sections --------------------------------------------------------------------------------- */
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.settings-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.settings-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-desc {
+  color: var(--fg-muted);
+}
+
+/* --- Switches (checkbox styled as a toggle) ------------------------------------------------------------------ */
+
+.switch {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 38px;
+  height: 22px;
+}
+
+/* a label wrapper forwards track clicks to the input — show the pointer */
+label.switch {
+  cursor: pointer;
+}
+
+/* The real checkbox stays in the layout (focusable, clickable, screen-reader
+   visible) but is transparent — the track below paints the visuals. */
+.switch-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-track {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 16%, transparent);
+  transition: background-color var(--dur-med) var(--ease-out);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.switch-input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch-input:checked + .switch-track .switch-thumb {
+  transform: translateX(16px);
+}
+
+.switch-input:focus-visible + .switch-track {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.switch-input:disabled {
+  cursor: not-allowed;
+}
+
+.switch-input:disabled + .switch-track {
+  opacity: 0.45;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+
+.switch-row.is-disabled {
+  cursor: not-allowed;
+}
+
+.switch-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.switch-row-label {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-medium);
+}
+
+.switch-row-hint {
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+}
+
+.switch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+
+.switch-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* The clickable text + track pair; the Info button sits outside it so its
+   aria-label never leaks into the checkbox's accessible name. */
+.switch-option-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  gap: var(--space-3);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.switch-option-label {
+  font-size: var(--fs-caption);
+  color: var(--fg-muted);
+}
+
+/* --- Field labels with an inline info button ------------------------------------------------- */
+
+/* Label text and its Info affordance on one baseline; the button is excluded
+   from the label element so it never joins the control's accessible name. */
+.field-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- Segmented control (side left/right/top) ----------------------------------------------------------------------- */
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+}
+
+.segmented-item {
+  position: relative;
+}
+
+.segmented-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segmented-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  user-select: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+.segmented-item:active .segmented-label {
+  transform: scale(0.96);
+}
+
+.segmented-radio:checked + .segmented-label {
+  background: var(--bg-elev);
+  color: var(--fg);
+  box-shadow: var(--shadow-card);
+}
+
+.segmented-radio:focus-visible + .segmented-label {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* --- Memory strategy choices -------------------------------------------------------------------------------------- */
+
+/* Radio card. The dot is shared with the timestamp rows (`.timestamp-dot`)
+   and, via `.profile-pick.is-active`, the profile picker — one selected-state
+   vocabulary. */
+.strategy-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+/* Neutral hover fill per the interaction contract (the checked state carries
+   the accent); gated to real hover devices. */
+@media (hover: hover) {
+  .strategy-option:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.strategy-option:active {
+  transform: scale(0.98);
+}
+
+.strategy-option.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.strategy-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.strategy-option:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The one radio dot: strategy cards, timestamp rows and the profile picker. */
+.strategy-dot,
+.timestamp-dot {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: transparent;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* The strategy dot rides the label's first line; the timestamp dot is
+   vertically centered in its row. */
+.strategy-dot {
+  margin-top: 1px;
+}
+
+.strategy-option.is-active .strategy-dot,
+.timestamp-row.is-active .timestamp-dot,
+.profile-pick.is-active .strategy-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--bg-elev);
+}
+
+.strategy-label {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+/* --- Settings: chat display (Settings → Chat) ------------------------------------------------- */
+
+/* Highlight color rows: the swatch input plus its reset / caption cluster. */
+.color-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Compact swatch — the native color picker chrome, restyled to the theme. */
+.color-input {
+  /* 40×30 (was 34×26): a comfortable pointer target for a control that is
+     otherwise a fiddly native swatch. */
+  width: 40px;
+  height: 30px;
+  padding: 2px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  cursor: pointer;
+}
+
+.color-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 1px;
+}
+
+.color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+}
+
+.color-input::-moz-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+}
+
+/* Caption shown while a row follows the theme's default color. */
+.color-hint {
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+}
+
+/* --- Timestamp format options -------------------------------------------------------------------------- */
+
+/* One format row: radio overlay + dot + name, with the live preview pinned
+    right (mono, muted) that re-renders every second against the clock. */
+.timestamp-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+/* Neutral hover fill per the contract; the checked state carries the accent. */
+@media (hover: hover) {
+  .timestamp-row:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.timestamp-row:active {
+  transform: scale(0.98);
+}
+
+.timestamp-row.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.timestamp-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.timestamp-row:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* `.timestamp-dot` itself is defined once with `.strategy-dot` above. */
+
+.timestamp-name {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-medium);
+}
+
+.timestamp-preview {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- Connection profiles (Settings → Profiles) ------------------------------------------------------------- */
+
+/* Model id chip in a profile row (mono, code style). */
+.model-id {
+  padding: 2px 8px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+/* Custom-endpoint chip in a profile row: quieter than the model id (tinted
+   rather than bordered) so a row reads model-first, endpoint-second. */
+.endpoint-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+/* Icon-only "API key stored" marker on a profile row. */
+.profile-key-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--fg-muted);
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+/* A profile row's left half: the "Use for chats" radio pick. The dot is the
+   shared `.strategy-dot`, whose active variant is defined once above. */
+.profile-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.profile-pick:active {
+  transform: scale(0.98);
+}
+
+.profile-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.profile-pick:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+.profile-pick-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-medium);
+}
+
+/* Edit / delete icon buttons cluster tighter than .row's default gap. */
+.profile-actions {
+  gap: var(--space-1);
+}
+
+/* The inline create / edit form below the list. */
+.profile-editor {
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+.profile-model-tools {
+  flex-wrap: wrap;
+}
+
+/* "API key" label + the "Stored" badge share a line inside the field. */
+.profile-key-label {
+  flex-wrap: wrap;
+}
+
+.profile-key-label .field-label {
+  margin: 0;
+}
+
+/* "Clear stored key" toggle under the API-key input. */
+.profile-key-clear {
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.profile-key-clear-label {
+  font-size: var(--fs-caption);
+  color: var(--fg-muted);
+}
+
+/* Sampler fields as a compact responsive grid. */
+.profile-samplers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+/* --- Settings: regex rules (Settings → Regex) -------------------------------------------------------------- */
+
+/* The three placements spelled out once at the top of the panel: the same
+   labels recur as chips on each rule, so the legend explains them in place. */
+.regex-placement-help {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding-left: var(--space-4);
+  max-width: 70ch;
+}
+
+/* Toolbar above the list: primary add, import/export, and the next-import
+   policy. The mode segment + its hint form one column so the hint sits under
+   the control instead of wrapping beside it. */
+.regex-actions {
+  align-items: flex-start;
+}
+
+.regex-import-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.regex-import-mode .set-row-hint {
+  max-width: 46ch;
+}
+
+/* Import feedback: the imported count plus the skipped entries, warning-tinted
+   like .warn-banner but with a list body. */
+.regex-import-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+
+.regex-import-notice .transfer-msg {
+  margin: 0;
+}
+
+.regex-skipped-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--warning);
+}
+
+.regex-skipped-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.regex-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* One rule card: name + enable switch on the head row, the find/replace
+   source line under it, then placements + row actions. */
+.regex-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition:
+    opacity var(--dur-med) var(--ease-out),
+    border-color var(--dur-med) var(--ease-out);
+}
+
+/* A disabled rule stays readable but visibly stepped back; only the opacity
+   animates (compositor-friendly), never a filter. */
+.regex-card.is-off {
+  opacity: 0.6;
+}
+
+.regex-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.regex-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.regex-card-name {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+}
+
+/* The find → replace line: monospace like the profile model id, wrapped so a
+   long pattern does not stretch the card. */
+.regex-card-source {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  word-break: break-all;
+}
+
+.regex-card-find {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 48ch;
+}
+
+.regex-card-replace {
+  color: var(--fg);
+}
+
+/* The enable switch must not stretch; flex: none also keeps it from being
+   pushed by a long name. */
+.regex-card-switch {
+  flex: none;
+}
+
+.regex-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* Placement chips on a rule row. Non-interactive (unlike a .chip filter), so
+   they reuse the .pill badge tint rather than the button affordance. */
+.regex-placements {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Edit / duplicate / delete cluster tighter than .row's default gap. */
+.regex-card-actions {
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+/* Monospace editor inputs: a regex source and a replacement string are code,
+   so the placeholder's smart quotes and a `\d` read correctly. */
+.regex-mono {
+  font-family: var(--font-mono);
+}
+
+/* --- Responsive -------------------------------------------------------------------------------------------------------------- */
+
+@media (max-width: 1000px) {
+  .char-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .char-grid,
+  .persona-grid,
+  .preset-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The shared switch label wraps (its consumer is the character URL-import
+     row); Settings rows use `.set-row`, which stacks at this width in
+     settings.css. */
+  .switch-row {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .char-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  /* Dense toolbars stack comfortably: the search field takes its own full
+     row, the chips and view toggle wrap under it, and page actions share
+     the width evenly instead of hugging one edge. */
+  .page-actions {
+    width: 100%;
+  }
+
+  .page-actions > .btn {
+    flex: 1 1 auto;
+  }
+
+  .chars-toolbar {
+    align-items: stretch;
+  }
+
+  .chars-toolbar .search-field {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .chars-toolbar .view-toggle {
+    margin-left: auto;
+  }
+
+  .transfer-row > .select {
+    flex-basis: 100%;
+  }
+
+  /* Phone widths: keep the icon + name on the first row and drop the trailing
+     controls onto their own full-width, right-aligned row so .lore-main never
+     collapses and the name/tap target stays visible. */
+  .lore-card {
+    flex-wrap: wrap;
+  }
+
+  .lore-actions {
+    justify-content: flex-end;
+    flex-basis: 100%;
+  }
+
+  /* Entry cards go single-column at ≤760px (see .entry-grid), so the card
+     head keeps its label + tools on one row and the tap target stays full
+     width — no wrap needed, unlike the old flex row this replaced. */
+  .entry-page-range {
+    margin-left: 0;
+  }
+}

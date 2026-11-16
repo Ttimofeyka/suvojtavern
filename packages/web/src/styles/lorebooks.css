@@ -1,0 +1,565 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Lorebook management styles — the Lorebooks page card list's Global toggle
+ * and the character editor's attach list. The chat-header popover lives in
+ * chrome.css next to the persona picker it mirrors.
+ *
+ * House rules, per DESIGN.md: zero hardcoded colors — every color/border/
+ * shadow flows from theme vars (color-mix over those vars for tints).
+ */
+
+/* === Lorebooks page: card Global toggle ====================================== */
+
+/* "Global" label + track as one button (role="switch", state on
+ *  aria-checked). Button rather than the .switch checkbox pattern in
+ *  views.css: the card row owns no <label>, and the state lives in the
+ *  view's store, not a form input. */
+.lore-global {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.lore-global-label {
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  transition: color var(--dur-med) var(--ease-out);
+}
+
+/* Track/thumb mirror .switch (views.css) so both toggles read as one. */
+.lore-global-track {
+  position: relative;
+  display: block;
+  width: 38px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 16%, transparent);
+  transition: background-color var(--dur-med) var(--ease-out);
+}
+
+.lore-global-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
+  /* The thumb is a Motion spring (LorebookList), so no CSS transform
+     transition here — the inline transform is the only mover. */
+}
+
+.lore-global[aria-checked="true"] .lore-global-track {
+  background: var(--accent);
+}
+
+.lore-global[aria-checked="true"] .lore-global-label {
+  color: var(--accent);
+}
+
+/* No focus override: the shared button:focus-visible ring (base.css) already
+   covers this control at the house 1px offset — an ad-hoc offset here was the
+   only divergence. */
+
+/* === Lorebooks page: "became global" card glow ================================ */
+
+/* Accent ring + glow flashing once (~600ms, LorebookList toggles the class)
+ *  when a book's global flag flips — ENABLE or DISABLE, so the switch always
+ *  answers the click. ::before, because .card-hover::after is already
+ *  the hover shadow layer; opacity-only keyframe per the motion.css house
+ *  rule — the ring fades in/out on the compositor. The 600ms base derives
+ *  from --motion-scale, so "subtle" quickens it and "off" collapses it. */
+.lore-card-pulse::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  border: 1px solid var(--accent);
+  border-radius: inherit;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  animation: lore-global-pulse calc(600ms * var(--motion-scale)) var(--ease-out);
+}
+
+@keyframes lore-global-pulse {
+  35% {
+    opacity: 1;
+  }
+}
+
+/* === Character editor: lorebook attach list =================================== */
+
+/* Bordered, scrollable checklist of the existing lorebooks. */
+.lorebook-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+.lorebook-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+
+/* Purely decorative highlight — the row stays tappable without it, so it is
+   gated behind (hover: hover) to avoid a stuck tint after a touch tap. */
+@media (hover: hover) {
+  .lorebook-picker-row:hover {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+
+.lorebook-picker-row:active {
+  transform: scale(0.99);
+}
+
+.lorebook-picker-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lorebook-picker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-body-medium);
+}
+
+.lorebook-picker-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+}
+
+.lorebook-picker-empty {
+  max-width: 60ch;
+}
+
+/* ============================================================================
+ * Entry editor — sticky status, grouped field taxonomy
+ *
+ * The editor's new surfaces (status pill, collapsible wells, flag digest) are
+ * namespaced `entry-*` and build on the token layer exactly like characters
+ * .css: hairline structure, the surface ladder, tabular figures. The entry
+ * card surface itself is owned here (`.entry-page .entry-card`); the list's
+ * surrounding chrome (head, tools, meta row) still lives in views.css.
+ * ========================================================================== */
+
+.entry-editor {
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* --- Entry field AI generate action ---------------------------------------- */
+
+/* A compact square pushed to the end of the field-label row (mirrors
+   .char-generate-btn) — smaller than the shared 32px .btn-icon but still a
+   comfortable hit target (28px). */
+.entry-generate-btn.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: var(--space-1);
+  margin-left: auto;
+}
+
+/* Sticky-header status pill; the dot is a redundant, always-visible cue. */
+.entry-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+}
+
+.entry-status-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+.entry-status-dirty {
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: var(--warning);
+}
+
+.entry-status-danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+}
+
+.entry-status-clean {
+  color: var(--fg-faint);
+}
+
+/* Compact digest of the active flags, above the wells. */
+.entry-flag-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--hairline);
+}
+
+.entry-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.entry-flag-off {
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: var(--warning);
+}
+
+/* The key/character count is metadata, not a flag: dashed and quiet. Its
+   digits ride the shared `.tnum` class in the markup. */
+.entry-flag-quiet {
+  border-style: dashed;
+  color: var(--fg-faint);
+}
+
+/* One taxonomy well. Recessed one step below the modal surface, like the
+   character editor's `.char-group`. Not clipped: the header's focus ring and
+   the disclosure's own clip box (on .collapsible-inner) are enough. */
+.entry-group {
+  display: flex;
+  flex-direction: column;
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.entry-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  /* Inset padding keeps the toggle's hover fill and focus ring clear of the
+     group's rounded corners without clipping either (see the note above). */
+  padding: var(--space-1);
+  font: inherit;
+}
+
+.entry-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* Decorative hover tint; gated so a touch tap does not leave it stuck. */
+@media (hover: hover) {
+  .entry-group-toggle:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.entry-group-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--fg-faint);
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+/* Open state rides the trigger's own aria-expanded — the one disclosure
+   mechanism shared by every trigger in these editors (the group formerly used
+   a redundant data-open attribute). */
+.entry-group-toggle[aria-expanded="true"] .entry-group-chevron {
+  transform: rotate(180deg);
+}
+
+.entry-group-title {
+  flex: none;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+}
+
+.entry-group-summary {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Padding lives on this child, never on .collapsible-inner: padding on a
+   height:0 clip box would survive as a visible sliver when collapsed. */
+.entry-group-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+/* ============================================================================
+ * Entry blocks, section headers, pagination
+ * ========================================================================== */
+
+/* A page of blocks; the gap spaces the per-block Motion wrappers. */
+.entry-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The section's ordinal, so a long book's order is legible at a glance. */
+.entry-section-index {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+}
+
+/* Section body: Collapsible owns the clip; spacing rides the grid inside so a
+   collapsed (height:0) disclosure adds no remainder. */
+.entry-section-body .collapsible-inner > .entry-grid {
+  padding-top: var(--space-2);
+}
+
+/* A book with no entries and no sections: a deliberate, explained empty well
+   rather than a bare row of buttons. */
+.entry-empty {
+  display: grid;
+  place-items: center;
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  text-align: center;
+}
+
+.entry-empty-title {
+  margin: 0;
+  font-weight: var(--fw-body-semibold);
+}
+
+.entry-empty-hint {
+  margin: 0;
+  max-width: 54ch;
+  color: var(--fg-faint);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* ============================================================================
+ * Entry grid + cards — staggered entrance, state badges, hover feedback
+ * ========================================================================== */
+
+/* <Stagger> renders display:contents by default so it can wrap a caller's
+   layout; here it IS the grid, so restore the grid display on the compound
+   selector (beats the bare `.stagger` rule regardless of load order). */
+.entry-grid.stagger {
+  display: grid;
+}
+
+.entry-grid .stagger-item {
+  display: flex;
+  min-width: 0;
+}
+
+/* Two classes (not three) so this does not out-rank the `.entry-page
+   .entry-card` refinements that follow. */
+.stagger-item > .entry-card {
+  flex: 1;
+}
+
+/* The single `.entry-card` definition (the base that used to live in
+   views.css is gone): the entry card only ever renders inside a `.entry-page`,
+   so its surface and its hover/focus/disabled states are kept in one place. */
+.entry-page .entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Floor the height so a 1-key card and a 5-key card sharing a row do not
+     make the grid row jump as the badge row grows past one line. Taller than a
+     plain list card: this one carries a state-badge row plus the meta line. */
+  min-height: 96px;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  /* surface-2 reads raised over a section well (surface-1) and level with the
+     ungrouped area on the modal — the same card token the list uses. */
+  background: var(--surface-2);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-med) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .entry-page .entry-card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+}
+
+/* Focus anywhere in the card lifts its edge, matching `.card-hover`'s logic
+   for a card whose whole head is one button. */
+.entry-page .entry-card:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+/* A disabled entry stays fully interactive but reads as muted at a glance. */
+.entry-page .entry-card-disabled {
+  opacity: 0.62;
+}
+
+@media (hover: hover) {
+  .entry-page .entry-card-disabled:hover {
+    opacity: 0.85;
+  }
+}
+
+.entry-card-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.entry-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: var(--hairline);
+  border-radius: var(--radius-xs);
+  /* Raised one step over the card it sits on. */
+  background: var(--surface-3);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+.entry-state-on {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.entry-state-off {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+}
+
+.entry-state-legacy {
+  border-color: color-mix(in srgb, var(--fg) 18%, transparent);
+  color: var(--fg-faint);
+}
+
+/* The meta statistics are one tabular row; each value keeps its own span so
+   none of them reflows as a digit changes. */
+.entry-page .entry-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: hidden;
+}
+
+.entry-page .entry-meta > span {
+  white-space: nowrap;
+}
+
+/* ============================================================================
+ * Lorebook list — staggered entrance, deleted-row exit
+ * ========================================================================== */
+
+/* Same display restoration as the entry grid: <Stagger> as the flex column. */
+.lore-list.stagger {
+  display: flex;
+}
+
+.lore-list .stagger-item {
+  min-width: 0;
+}
+
+.lore-list .stagger-item > .lore-card {
+  width: 100%;
+}
+
+/* Skeleton rows ride the same stagger container; the nested wrapper keeps the
+   aria-hidden semantics the bare <Stagger> cannot carry. */
+.lore-list .skeleton-row {
+  min-height: 66px;
+}

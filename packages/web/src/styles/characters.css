@@ -1,0 +1,543 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Character & persona editor surfaces.
+ *
+ * New code only — the legacy `.form-section` / `.greeting-card` / `.gallery-tile`
+ * vocabulary in views.css stays untouched (a second agent owns the list views,
+ * and views.css is not ours to edit). Everything here is namespaced `char-`
+ * and builds on the precision token layer (base.css/tokens.css): hairline
+ * structure, the surface ladder, sharper radii, tabular figures. Zero literal
+ * colors — every value derives from a theme token via color-mix.
+ *
+ * Motion that needs JS lives in the components (lib/motion.ts); the few
+ * transitions here are decoration on transform/opacity and honor the global
+ * reduced-motion kill in base.css.
+ */
+
+/* Sticky-header status: one compact pill whose tint encodes the state. */
+.char-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+}
+
+.char-status-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+/* "All changes saved" shares the neutral (clean) tone with the status pill's
+   idle states, so a solid dot would read the same SHAPE as the dirty/danger
+   pills. A hollow ring marks the settled state by shape, not just tint. */
+.char-status-clean .char-status-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.char-status-danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+}
+
+.char-status-dirty {
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: var(--warning);
+}
+
+.char-status-clean {
+  color: var(--fg-faint);
+}
+
+/* --- Field footer (hint + counter) ----------------------------------------- */
+
+.char-field-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.char-field-foot .field-hint {
+  margin: 0;
+}
+
+/* Numeric readouts opt into fixed-width digits so the row never reflows while
+   the user types. */
+.char-counter {
+  flex: none;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  font-variant-numeric: var(--fvn-tabular);
+  white-space: nowrap;
+}
+
+/* --- Compact icon-button scale --------------------------------------------- */
+
+/* The editor's dense chrome steps the 32px .btn-icon default down along ONE
+   shared scale instead of each surface hardcoding its own square:
+   --compact (28px, inside a row of controls). `.btn.btn-icon-compact`
+   outranks the base `.btn-icon` by specificity, so load order cannot flip
+   the size. */
+.btn.btn-icon-compact {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+}
+
+/* --- Upload dropzones ------------------------------------------------------ */
+
+.char-dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  color: var(--fg-muted);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-med) var(--ease-out),
+    background-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .char-dropzone:hover {
+    /* The base border already sits at --border-strong, so the hover strengthens
+       it further and adds the neutral surface tint — a real response instead of
+       the no-op border-color it used to set. */
+    border-color: color-mix(in srgb, var(--border-strong) 45%, var(--fg));
+    background: var(--surface-hover);
+    color: var(--fg);
+  }
+}
+
+/* While a drag hovers the zone — the accent makes the drop target obvious. */
+.char-dropzone.is-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-1));
+  color: var(--fg);
+}
+
+.char-dropzone-icon {
+  display: inline-flex;
+  color: var(--fg-faint);
+}
+
+.char-dropzone.is-over .char-dropzone-icon {
+  color: var(--accent);
+}
+
+/* --- Gallery grid ---------------------------------------------------------- */
+
+/* The tile overlay controls use the shared .btn-icon-compact (28px) rung, so
+   four of them fit a 140px tile. (The grid track sizing itself comes from the
+   existing .gallery-tiles rule.) */
+
+/* Placeholder tile shown until the first gallery fetch settles, so the panel
+   never flashes its "No images yet" empty state on first paint. */
+.char-gallery-skeleton {
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+}
+
+/* --- Lightbox: Motion owns entrance/exit ----------------------------------- */
+
+/* views.css animates these with CSS keyframes; this component now drives both
+   phases through Motion, so the competing keyframe animation is switched off
+   (higher specificity wins regardless of stylesheet order). */
+.lightbox-overlay.char-lightbox,
+.lightbox-panel.char-lightbox-panel {
+  animation: none;
+}
+
+/* --- Import modal ---------------------------------------------------------- */
+
+.char-transfer {
+  gap: var(--space-4);
+}
+
+/* One line under the dialog title: what this modal does before the tabs split
+   it into three separate jobs. */
+.char-transfer-intro {
+  margin: calc(var(--space-1) * -1) 0 0;
+}
+
+/* Full-width tab strip: three equal targets, so the strip never changes width
+   as the panel below it does. */
+.char-transfer-tabs {
+  display: flex;
+  width: 100%;
+}
+
+.char-transfer-tabs .segmented-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.char-transfer-tabs .segmented-label {
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: var(--fs-caption);
+  letter-spacing: normal;
+}
+
+.char-transfer-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* Touch devices get a full 44px target even though the strip is 36px on a
+   pointer device. */
+@media (pointer: coarse) {
+  .char-transfer-tabs .segmented-label {
+    min-height: 44px;
+  }
+}
+
+/* On a phone the three labels fit without their icons; dropping them keeps
+   the strip from wrapping inside the panel's own padding. */
+@media (max-width: 520px) {
+  .char-transfer-tab svg {
+    display: none;
+  }
+
+  .char-transfer-tabs .segmented-label {
+    padding: 8px 6px;
+  }
+}
+
+.char-transfer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.char-transfer-panel > * {
+  min-width: 0;
+}
+
+/* Panel hero: icon tile, title, and one sentence saying what the tab imports.
+   This is the explanation the old numbered steps never gave. */
+.char-transfer-panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.char-transfer-panel-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+}
+
+.char-transfer-panel-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.char-transfer-panel-title {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+  line-height: 1.3;
+}
+
+.char-transfer-panel-desc {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* A labeled control: the label is real (htmlFor or wrapping), never a
+   placeholder, and the hint sits under the control it explains. */
+.char-transfer-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.char-transfer-field-label {
+  color: var(--fg);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-body-medium);
+  line-height: var(--lh-caption);
+}
+
+/* Link row: one line on desktop, stacked on phones where the button would
+   squeeze the input below a readable width. */
+.char-transfer-url {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.char-transfer-url .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.char-transfer-url .btn {
+  flex: none;
+}
+
+@media (max-width: 520px) {
+  .char-transfer-url {
+    flex-direction: column;
+  }
+
+  .char-transfer-url .btn {
+    width: 100%;
+  }
+}
+
+/* --- Import modal: dropzone ------------------------------------------------ */
+
+/* The shared .char-dropzone supplies the dashed well; this refines it for the
+   dialog. Padding moves onto the inner button so the button IS the target:
+   the whole zone is one real control, and the focus ring hugs the whole well. */
+.char-transfer-drop.char-dropzone {
+  padding: 0;
+}
+
+.char-transfer-drop.is-over {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* A busy import keeps full contrast (the spinner is the affordance); only a
+   genuinely unavailable target dims. */
+.char-transfer-drop.is-disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.char-transfer-drop.is-disabled:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  color: var(--fg-muted);
+}
+
+.char-dropzone-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-6) var(--space-5);
+  border: none;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.char-dropzone-target:disabled,
+.char-dropzone-target[aria-disabled="true"] {
+  cursor: default;
+}
+
+.char-dropzone-badge {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-1);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  transition:
+    border-color var(--dur-med) var(--ease-out),
+    background-color var(--dur-med) var(--ease-out),
+    color var(--dur-med) var(--ease-out);
+}
+
+.char-dropzone.is-over .char-dropzone-badge {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  color: var(--accent);
+}
+
+.char-dropzone-title {
+  color: var(--fg);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+  line-height: 1.3;
+}
+
+.char-dropzone-hint {
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+}
+
+/* --- Import modal: shared card options ------------------------------------- */
+
+/* The toolbar search field's sizing assumes a row parent; inside the modal's
+   column groups it must span the group instead of taking a 220px basis. */
+.char-transfer .search-field {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+/* The lorebook switch is a second option in the Card options well; a hairline
+   separates it from the duplicate-name field above. */
+.switch-row.char-transfer-switch {
+  padding: var(--space-3) 0 0;
+  border-top: var(--hairline);
+}
+
+/* The shared switch row wraps on phones. On its own row the switch keeps the
+   trailing edge, matching its position on wider screens. */
+@media (max-width: 600px) {
+  .switch-row.char-transfer-switch {
+    justify-content: flex-start;
+  }
+
+  .switch-row.char-transfer-switch .switch {
+    margin-left: auto;
+  }
+}
+
+/* The JanitorAI head carries a status pill and up to two actions, so it wraps
+   instead of squeezing the title on a narrow panel. */
+.char-transfer-auth-head {
+  flex-wrap: wrap;
+}
+
+/* --- Import modal: JanitorAI section --------------------------------------- */
+
+/* The auth action sits at the trailing edge of the status row, so the pill
+   keeps its natural width on the left. */
+.char-janitor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* The inline "Retry" link inside a JanitorAI hint: caption-sized and flush on
+   the sentence baseline rather than .btn's default nav size. */
+.char-janitor-hint-link {
+  padding: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+  vertical-align: baseline;
+}
+
+/* "Signed in" tints the shared .char-status pill green (mirrors .badge-success). */
+.char-status-success {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: var(--success);
+}
+
+/* Waiting/settled note under the auth row: spinner + copy on one line. */
+.char-janitor-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Non-fatal import warnings reuse .warn-banner (views.css) with a stacked
+   .char-janitor-callout-body, so they no longer carry their own box. */
+
+/* The private-definition fallback reuses .warn-banner's tint and row layout;
+   this only stacks its copy above the "Extract anyway" button. */
+.char-janitor-callout-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* --- Purge modal ----------------------------------------------------------- */
+
+.char-purge-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* --- Persona editor -------------------------------------------------------- */
+
+.char-persona {
+  gap: var(--space-4);
+}
+
+/* Avatar first: a persona is identified by its face before its prose. The
+   existing .persona-avatar-drop keeps its behaviour; this only re-lays it as a
+   full-width column with the preview above the label. */
+.char-avatar-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.char-avatar-zone .persona-avatar-drop {
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+/* Beats `.persona-avatar-preview` on specificity (not load order) so the
+   larger square holds regardless of when this sheet is injected. */
+.persona-avatar-preview.char-avatar-preview-lg {
+  width: 88px;
+  height: 88px;
+}
+
+.char-avatar-remove {
+  align-self: center;
+}

@@ -1,0 +1,969 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Tracker settings (Settings → Tracker) — TrackerSettings.tsx and the
+ * tracker/ card components (SchemaPresetsCard, PresetRail, TemplatePane,
+ * JsonEditor, DrawerTabsCard).
+ *
+ * Panel-specific additions to the settings vocabulary in views.css (settings
+ * rows, switches, steppers, segmented controls, fields) and base.css (buttons,
+ * badges, stack/row, modals). The visual editor is a precision IDE-like shell:
+ * near-black layered surfaces, 1px hairline structure, monospace + tabular
+ * figures for keys/JSON/numbers, and NO hardcoded colors — every value derives
+ * from the theme tokens. Its motion comes from the components themselves
+ * (Motion `Reorder`, `Presence`, `Collapsible`), so this file animates only
+ * cheap color/border transitions on hover/focus.
+ */
+
+/* --- Dimming + fieldset reset ---------------------------------------------------------------------- */
+/*
+ * Cards whose controls lock when the tracker is off wrap them in a real
+ * <fieldset disabled> — the browser disables every descendant control for
+ * free; the reset strips the native chrome and the rule dims the whole
+ * group like .preset-row.is-off does elsewhere.
+ */
+
+.tracker-fields {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.tracker-fields:disabled {
+  opacity: 0.55;
+}
+
+/* --- Rows: selects, steppers, header input ------------------------------------------------------------ */
+
+/* Selects and the header input keep a stable width instead of stretching
+ * with their option text; they still shrink on narrow screens. */
+.tracker-select,
+.tracker-header-input {
+  flex: none;
+  width: 224px;
+  max-width: 100%;
+}
+
+/* --- System prompt + code editors --------------------------------------------------------------------- */
+
+/* Label (and, for the HTML template, the syntax cheatsheet) above an
+ * editor, with the Reset to default action on the far right. */
+.tracker-prompt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Monospace editor blocks: the system prompt, the raw JSON schema, and
+ * the HTML/CSS template editors. */
+.tracker-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: 1.55;
+  min-height: 96px;
+  resize: vertical;
+  white-space: pre-wrap;
+}
+
+/* The template-syntax reference under the HTML editor: a description list of
+ * token → meaning rows, revealed on demand. */
+.tracker-cheatsheet {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.tracker-cheatsheet-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.tracker-cheatsheet dt {
+  flex: none;
+  margin: 0;
+}
+
+.tracker-cheatsheet dd {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+}
+
+.tracker-cheatsheet code {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+}
+
+/* --- Visual editor launcher ----------------------------------------------------------------------------- */
+/*
+ * The compact card that replaces the old inline editor: the active
+ * preset, a one-line shape summary, and the button opening the big
+ * visual-editor modal.
+ */
+
+.tracker-editor-launch {
+  justify-content: space-between;
+}
+
+.tracker-editor-launch-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tracker-editor-launch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-body-semibold);
+}
+
+.tracker-editor-launch-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+/* --- Editor shell: rail | main | template ------------------------------------------------------------- */
+/*
+ * Three panes on a wide viewport (preset rail, editing surface, templates +
+ * preview), two on a medium one (the rail beside a stacked main + template),
+ * one on a phone. The rail sticks while the modal body scrolls so the preset
+ * list never leaves the viewport mid-edit.
+ */
+
+.tracker-editor-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+  /* The modal body has no bottom padding of its own; give the last pane air. */
+  padding-bottom: var(--space-5);
+}
+
+.tracker-main,
+.tracker-template-pane,
+.tracker-rail {
+  min-width: 0;
+}
+
+.tracker-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tracker-pane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.tracker-pane-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tracker-pane-title {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+  letter-spacing: var(--ls-body-large);
+}
+
+.tracker-pane-summary {
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+.tracker-mode-row {
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Inline list of the same issues the panel's Save gate blocks on. */
+.tracker-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Persistence reminder under the editor shell: the modal edits the panel's
+ * config, but the panel's Save is what writes it. */
+.tracker-editor-note {
+  margin: 0;
+  text-align: right;
+}
+
+@media (min-width: 1000px) {
+  .tracker-editor-shell {
+    grid-template-columns: 216px minmax(0, 1fr);
+    grid-template-areas:
+      "rail main"
+      "rail aside";
+  }
+
+  .tracker-rail {
+    grid-area: rail;
+    position: sticky;
+    top: var(--space-2);
+  }
+
+  .tracker-main {
+    grid-area: main;
+  }
+
+  .tracker-template-pane {
+    grid-area: aside;
+  }
+}
+
+@media (min-width: 1240px) {
+  .tracker-editor-shell {
+    grid-template-columns: 216px minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-areas: "rail main aside";
+  }
+}
+
+/* --- Preset rail ------------------------------------------------------------------------------------------ */
+
+.tracker-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tracker-rail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.tracker-rail-title {
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+.tracker-rail-count {
+  margin-right: auto;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+}
+
+/* One preset row. The selected row's pill is a Motion shared-layout element
+ * rendered inside the button, so the whole vocabulary lives here. */
+.tracker-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .tracker-rail-item:not(:disabled):hover {
+    color: var(--fg);
+    background: var(--surface-hover);
+  }
+}
+
+.tracker-rail-item.is-selected {
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.tracker-rail-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.tracker-rail-pill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  box-shadow: var(--elev-1);
+  pointer-events: none;
+}
+
+.tracker-rail-item-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.tracker-rail-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-body-medium);
+}
+
+.tracker-rail-item-key {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-badge);
+}
+
+/* Marks the preset the config actually points at (usually the selected one;
+ * distinct while editing a different preset). */
+.tracker-rail-dot {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.tracker-rail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+.tracker-rail-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.tracker-rail-empty {
+  margin: 0;
+  padding: var(--space-2) var(--space-1);
+}
+
+/* The create/rename forms: a recessed well inside the rail. */
+.tracker-rail-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: clip;
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.tracker-rail-form-actions {
+  gap: var(--space-2);
+}
+
+/* --- Generation requests (multi-request split) --------------------------------------------------------- */
+/*
+ * A bordered block above the editing surface: the request stepper, then (when
+ * split) one field→request row per top-level field and a grouped preview.
+ * The resolution logic is unchanged — this is presentation only.
+ */
+
+.tracker-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.tracker-parts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.tracker-parts-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tracker-parts-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-top: var(--hairline);
+}
+
+/* Field name on the left, its request select on the right. */
+.tracker-part-field {
+  justify-content: space-between;
+}
+
+.tracker-part-field-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.tracker-part-select {
+  flex: none;
+  width: 148px;
+  max-width: 100%;
+}
+
+/* The grouped preview: one line per request, empty requests muted. */
+.tracker-parts-preview {
+  gap: 2px;
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+}
+
+.tracker-part-group {
+  gap: var(--space-2);
+  font-size: var(--fs-caption);
+}
+
+.tracker-part-group-label {
+  flex: none;
+  color: var(--fg-muted);
+  font-weight: var(--fw-body-medium);
+}
+
+.tracker-part-group.is-empty .tracker-part-group-label {
+  color: var(--fg-faint);
+}
+
+.tracker-part-group-fields {
+  font-family: var(--font-mono);
+}
+
+/* --- Schema form builder -------------------------------------------------------------------------------- */
+
+.tracker-form-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tracker-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Root metadata (schema title/description) as a compact pair above the rows. */
+.tracker-meta-title {
+  flex: 1;
+  min-width: 180px;
+}
+
+.tracker-meta-desc {
+  flex: 2;
+  min-width: 220px;
+}
+
+/* The reorderable field list. The row card (border/surface) is the
+ * Reorder.Item's; the form content lives inside its body. */
+.tracker-fields-list {
+  gap: var(--space-2);
+}
+
+.tracker-fields-list > .reorder-item {
+  padding: var(--space-3);
+  background: var(--surface-1);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .tracker-fields-list > .reorder-item:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--elev-1);
+  }
+}
+
+/* A row with a blank/duplicate name gets the danger hairline; `:has` reaches
+ * the card the ReorderableList owns from the body it renders. */
+.tracker-fields-list > .reorder-item:has(.tracker-field-wrap.is-invalid) {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.tracker-field-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.tracker-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.tracker-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Type glyph chip: neutral for scalars, accent-tinted for group/list types so
+ * the schema's shape reads at a glance. */
+.tracker-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--fg-muted);
+}
+
+.tracker-type-badge[data-type="object"],
+.tracker-type-badge[data-type="array"],
+.tracker-type-badge[data-type="string-array"] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.tracker-field-name {
+  flex: 1;
+  min-width: 140px;
+}
+
+.tracker-field-type {
+  flex: none;
+  width: 148px;
+}
+
+.tracker-field-desc {
+  width: 100%;
+}
+
+/* Required as a toggle switch + label. The switch markup keeps the platform
+ * checkbox (focusable, announced) while the track paints the state. */
+.tracker-field-required {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  user-select: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tracker-field-required-text {
+  white-space: nowrap;
+}
+
+/* Sub-fields: a foldable, shallower list under the parent field. */
+.tracker-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px dashed var(--border);
+}
+
+.tracker-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  margin-left: -6px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .tracker-group-toggle:hover {
+    color: var(--fg);
+    background: var(--surface-hover);
+  }
+}
+
+.tracker-group-count {
+  color: var(--fg-faint);
+}
+
+.tracker-subfields-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0 0;
+}
+
+.tracker-subfields-list {
+  gap: var(--space-1);
+}
+
+.tracker-subfields-list > .reorder-item {
+  padding: var(--space-2);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+
+.tracker-subfield {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.tracker-subfields-empty,
+.tracker-fields-empty {
+  margin: 0;
+}
+
+.tracker-add-field,
+.tracker-add-subfield {
+  align-self: flex-start;
+}
+
+/* The advanced-features notice replacing a form that cannot render. */
+.tracker-advanced-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+}
+
+/* --- Raw JSON editor -------------------------------------------------------------------------------------- */
+
+.tracker-raw {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tracker-raw-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.tracker-raw-toolbar .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The gutter and the textarea share a line height and vertical padding, so
+ * every logical line (white-space: pre, no soft wrap) sits exactly against
+ * its number. The gutter is scrolled in JS, mirroring the textarea. */
+.tracker-json {
+  display: flex;
+  min-height: 320px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.tracker-json.is-invalid {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.tracker-json-gutter {
+  flex: none;
+  overflow: hidden;
+  padding: 10px 8px 10px 10px;
+  border-right: var(--hairline);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  color: var(--fg-faint);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: 1.55;
+  user-select: none;
+}
+
+.tracker-json-lineno {
+  display: block;
+}
+
+.tracker-json .tracker-json-area {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  white-space: pre;
+  overflow: auto;
+  resize: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: 1.55;
+  font-variant-numeric: var(--fvn-tabular);
+}
+
+.tracker-json .tracker-json-area:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* The parse result under the editor: a validating editor needs a persistent
+ * status line, not only an error that appears and vanishes. */
+.tracker-json-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-caption);
+}
+
+.tracker-json-status.is-valid {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.tracker-json-status.is-invalid {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/* --- Templates + live preview ------------------------------------------------------------------------- */
+
+.tracker-template-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tracker-template-editor {
+  min-width: 0;
+}
+
+.tracker-template-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tracker-collapse-toggle {
+  gap: 6px;
+}
+
+.tracker-syntax {
+  margin-top: var(--space-1);
+}
+
+.tracker-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tracker-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.tracker-preview-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+  text-transform: uppercase;
+}
+
+.tracker-preview-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.tracker-preview-live.is-error {
+  color: var(--danger);
+}
+
+.tracker-preview-live.is-error .tracker-preview-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+/* TemplateFrame's iframe fills its wrapper (width/height 100%), so the
+ * preview area gets an explicit height and clips at the rounded corner. */
+.tracker-preview-frame {
+  height: 320px;
+  border: var(--hairline);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.tracker-preview-error {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+/* --- Drawer tab rows ------------------------------------------------------------------------------------- */
+
+.tracker-drawer-row {
+  gap: var(--space-3);
+}
+
+/* The clickable label half of a drawer row: fills the row and forwards clicks
+   to its checkbox via `htmlFor`, so the whole text is the toggle target. */
+.tracker-drawer-toggle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* The drawer card's trailing caption, padded to the row gutter. */
+.tracker-drawer-note {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+/* --- Responsive ------------------------------------------------------------------------------------------ */
+
+/* Phones: the fixed-width selects/inputs and the stepper go full width so
+   the rows stop cramming a control beside its label, and the editor
+   launcher stacks its copy above the launch button. */
+@media (max-width: 600px) {
+  .tracker-select,
+  .tracker-header-input,
+  .tracker-field-type,
+  .tracker-part-select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .tracker-editor-launch {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .tracker-editor-launch-main {
+    flex-basis: 100%;
+  }
+
+  .tracker-raw-toolbar,
+  .tracker-parts-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tracker-mode-row {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* --- Message tracker viewer (hover action modal) -------------------------------------------------------- */
+/*
+ * The modal that shows ONE swipe row's tracker (MessageTrackerViewer). Unlike
+ * the drawer panel — whose TemplateFrame flexes to the drawer height — a modal
+ * has no such track, so the frame gets a bounded fixed height with internal
+ * scroll: a long snapshot scrolls inside the frame instead of stretching the
+ * dialog past the viewport.
+ */
+
+.tracker-viewer-frame {
+  height: min(70vh, 560px);
+  overflow: auto;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+/* Centered spinner while the row's tracker is fetched. */
+.tracker-viewer-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+}
+
+/* "No tracker for this message" — the row was never tracked. */
+.tracker-viewer-missing {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  text-align: center;
+}

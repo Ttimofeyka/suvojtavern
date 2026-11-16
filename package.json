@@ -1,0 +1,45 @@
+{
+  "name": "suvojtavern",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted, local-first AI roleplay web client for OpenAI-compatible models.",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ttimofeyka/suvojtavern.git"
+  },
+  "homepage": "https://github.com/Ttimofeyka/suvojtavern#readme",
+  "keywords": [
+    "roleplay",
+    "ai",
+    "self-hosted",
+    "sillytavern",
+    "bun",
+    "react"
+  ],
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "packages/@suvoj/*"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd packages/server dev",
+    "dev:web": "bun run --cwd packages/web dev",
+    "build": "bun run --cwd packages/web build",
+    "test": "bun test",
+    "typecheck:plugins": "tsc -p plugins --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "db:init": "bun run --cwd packages/server src/db/init.ts",
+    "db:seed": "bun run --cwd packages/server src/db/seed.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@suvoj/plugin-sdk": "workspace:*",
+    "bun-types": "^1.4.0",
+    "typescript": "^7.0.2"
+  }
+}

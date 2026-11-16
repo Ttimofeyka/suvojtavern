@@ -1,0 +1,313 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Plugin UI styles — the Settings "Plugins" panel cards (PluginsPanel.tsx)
+ * and the sidebar's plugin-contributed group (Sidebar.tsx).
+ *
+ * House rules, per DESIGN.md: zero hardcoded colors — every color/border/
+ * shadow flows from theme vars (color-mix over those vars for tints).
+ */
+
+/* === Settings: plugins panel ================================================= */
+
+/* Toolbar: intro caption left, Reload button right. */
+.plugins-toolbar {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.plugins-list {
+  gap: var(--space-3);
+}
+
+/* One plugin per card: a whisper-bordered surface inset into the panel. */
+.plugins-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Hover border tint is decoration only (the card is not itself a control),
+   so it is gated behind (hover: hover): on touch a sticky :hover would leave
+   the border lit after a tap. */
+@media (hover: hover) {
+  .plugins-card:not(.plugins-card-broken):hover {
+    border-color: var(--border-strong);
+  }
+}
+
+/* Broken plugin: danger-tinted treatment so the failure reads at a glance. */
+.plugins-card-broken {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
+.plugins-card-head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.plugins-card-title {
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The h3 base (1.125rem) is oversized inside a settings panel — step down
+ * to the house row-title treatment. */
+.plugins-card-name {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-body-semibold);
+}
+
+.plugins-card-version {
+  flex: none;
+}
+
+/* Enable/disable status chip; its mount transition is the toggle feedback
+ * (the card remounts on a reference change). */
+.plugins-card-state {
+  flex: none;
+}
+
+/* Folder-style id in monospace, faint — identity for debugging, not focus. */
+.plugins-card-id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--fg-faint);
+}
+
+.plugins-card-desc {
+  max-width: 70ch;
+  color: var(--fg-muted);
+}
+
+/* The right-hand enablement toggle: label + switch, clickable as one
+ * (mirrors the Lorebooks "Global" toggle). */
+.plugins-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding-top: 2px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.plugins-toggle-label {
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-badge);
+  letter-spacing: var(--ls-badge);
+}
+
+/* Right-hand cluster: the enable toggle then the collapse chevron. */
+.plugins-card-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.plugins-card-expand {
+  flex: none;
+  color: var(--fg-faint);
+  touch-action: manipulation;
+}
+
+.plugins-card-expand:active {
+  transform: scale(0.97);
+}
+
+.plugins-card-expand svg {
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+
+.plugins-card-expand[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+/* Collapsible body: the settings form already carries its own top rule. */
+.plugins-card-body {
+  gap: var(--space-2);
+}
+
+/* Schema-driven settings form: separated from the card header by a whisper. */
+.plugins-settings {
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+/* Schema-driven multiselect: a checkbox group the settings form renders for
+   a `multiselect` field. Laid out as a wrapping list of tappable rows so a
+   long option set stays readable, matching the .switch-grid rhythm. It is a
+   <fieldset> (the semantically correct group role), so the browser's default
+   frame and padding are zeroed here. */
+.plugins-check-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.plugins-check-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* A ticked option reads as active copy, matching the checkbox state. */
+.plugins-check-option.is-on .plugins-check-label {
+  color: var(--fg);
+}
+
+/* The native checkbox, tinted from the theme accent (no hardcoded color). */
+.plugins-check-input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Per-plugin controls block: app-level values the plugin owns, rendered
+   under its settings form behind the same whisper rule. Kept out of the
+   <form> so a control flip never submits a half-edited settings draft. */
+.plugins-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+.plugins-controls-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.plugins-control-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.plugins-control-row-main {
+  display: flex;
+  flex: 1 1 140px;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.plugins-control-label {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg);
+}
+
+.plugins-control-desc {
+  font-size: var(--fs-badge);
+}
+
+.plugins-control-select {
+  flex: none;
+  width: auto;
+  min-width: 140px;
+}
+
+.plugins-control-switch {
+  flex: none;
+}
+
+/* The label for a switch's current position: the track alone cannot say what
+   "on" means, so the option in effect is named beside it. */
+.plugins-control-state {
+  flex: none;
+  font-size: var(--fs-badge);
+}
+
+/* A disabled control (plugin off, broken, or a write in flight) must read as
+   inert — not as a choice that silently does nothing. */
+.plugins-controls .select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* === Sidebar: plugin contributions =========================================== */
+
+/* The "Plugins" group at the bottom of the main nav: a divider, a micro
+ * label, then the contributed links (which reuse .nav-link entirely). */
+.sidebar-plugins {
+  display: flex;
+  flex-direction: column;
+  gap: 2px; /* matches .sidebar-nav's link rhythm */
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: var(--hairline);
+}
+
+/* Rides on .nav-label so the rail's label-hiding rule (shell.css targets
+ * .sidebar .nav-label) hides it with the rest of the icon-only rail. */
+.sidebar-plugins-label {
+  padding: 0 10px; /* aligns with .nav-link's inline padding */
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+  text-transform: uppercase;
+}
+
+/* Top layout: the nav flows horizontally — the group joins as a labeled
+ * cluster with a leading divider instead of the vertical stack's top rule. */
+.app-shell.sidebar-top > .sidebar .sidebar-plugins {
+  margin-top: 0;
+  padding-top: 0;
+  padding-left: var(--space-2);
+  border-top: none;
+  border-left: var(--hairline);
+}
+
+/* === Responsive ============================================================= */
+
+/* Phones: the intro caption takes the full width above the Reload button,
+   and a card's toggle/chevron cluster keeps to the right as the title
+   cluster wraps above it. */
+@media (max-width: 600px) {
+  .plugins-toolbar {
+    align-items: stretch;
+  }
+
+  .plugins-toolbar .set-intro {
+    flex-basis: 100%;
+  }
+
+  .plugins-card-head-actions {
+    margin-left: auto;
+  }
+
+  /* A control's switcher drops below its label on a phone, where the
+     label + select row would otherwise wrap awkwardly mid-caption. */
+  .plugins-control-row-main {
+    flex-basis: 100%;
+  }
+}

@@ -1,0 +1,50 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Confirm dialog body — shared by every destructive/leave confirmation.
+ *
+ * The panel, scrim, and exit choreography belong to Modal; this file only
+ * lays out the copy and the action row. Colours derive from theme tokens.
+ */
+
+.confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.confirm-dialog-copy {
+  max-width: 56ch;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.confirm-dialog-copy strong {
+  color: var(--fg);
+  font-weight: var(--fw-body-semibold);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: var(--hairline);
+}
+
+@media (max-width: 520px) {
+  .confirm-dialog-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .confirm-dialog-actions .btn {
+    width: 100%;
+  }
+}

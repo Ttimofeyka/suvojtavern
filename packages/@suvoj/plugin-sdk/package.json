@@ -1,0 +1,17 @@
+{
+  "name": "@suvoj/plugin-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./themes": "./src/themes.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@suvoj/core": "workspace:*"
+  }
+}

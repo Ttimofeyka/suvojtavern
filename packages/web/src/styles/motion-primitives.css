@@ -1,0 +1,141 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Motion primitives — layout for the JS components in components/ui.
+ *
+ * The components (segmented, reorder, collapsible, stagger) own behaviour and
+ * transitions; this file owns only the boxes they sit in. It is loaded after
+ * base.css/design.css/shell.css (see src/index.tsx) so its rules can refine the
+ * shared `.segmented` vocabulary (owned by views.css) for the Motion variant
+ * without editing that feature stylesheet.
+ *
+ * House rules as everywhere: no hardcoded colors (derive with color-mix),
+ * animate transform/opacity, and every decorative transition respects the
+ * motion tokens.
+ */
+
+/* --- Segmented: shared-layout indicator --------------------------------- */
+
+/* CANONICAL sliding indicator (.segmented-indicator, components/ui/segmented).
+ * This is the one shared implementation of the "selection slides between
+ * items" pattern — feature sheets should reuse the `<Segmented>` primitive
+ * rather than ship their own indicator. It is reduced-motion correct by
+ * construction: the component collapses its layout transition to INSTANT under
+ * reduce, and every visual property the selected state needs (position,
+ * border, fill, elevation) lives HERE in CSS, so the pill is present and
+ * correctly styled even when it never animates.
+ *
+ * The indicator is an absolutely-positioned sibling rendered just before the
+ * label, so it paints under the text. It is the only selected fill: the
+ * Motion variant deliberately does NOT use views.css's
+ * `.segmented-radio:checked + .segmented-label` rule (the indicator breaks
+ * that adjacent-sibling chain anyway), so the sliding pill is the state. */
+.segmented-motion .segmented-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  box-shadow: var(--elev-1);
+  pointer-events: none;
+}
+
+/* Text rides above the indicator. General-sibling (`~`) rather than adjacent
+ * (`+`) because the indicator sits between the input and the label. */
+.segmented-motion .segmented-label {
+  position: relative;
+  z-index: 1;
+}
+
+/* views.css's `.segmented-radio:checked + .segmented-label` can no longer match
+ * here: the indicator sits between input and label, breaking the adjacent
+ * chain. Without this the selected segment kept its base --fg-muted text over
+ * the indicator. Restore the active color (same as
+ * `.set-tab[aria-pressed="true"]`) derived from the theme token, not a literal. */
+.segmented-motion .segmented-radio:checked ~ .segmented-label {
+  color: var(--fg);
+}
+
+/* views.css keys the focus ring off `input + label`; keep the same ring for
+ * the re-ordered markup. */
+.segmented-motion .segmented-radio:focus-visible ~ .segmented-label {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 1px;
+}
+
+.segmented-motion .segmented-item.is-disabled {
+  opacity: 0.5;
+}
+
+.segmented-motion .segmented-item.is-disabled .segmented-radio {
+  cursor: not-allowed;
+}
+
+/* --- Reorder ------------------------------------------------------------ */
+
+.reorder-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorder-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.reorder-item:focus-within {
+  border-color: var(--border-strong);
+}
+
+/* touch-action: none keeps the browser from scrolling the page instead of
+ * starting the pointer drag on touch devices. */
+.reorder-grip {
+  flex: none;
+  cursor: grab;
+  color: var(--fg-faint);
+  touch-action: none;
+}
+.reorder-grip:active {
+  cursor: grabbing;
+}
+
+.reorder-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reorder-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+/* --- Stagger ------------------------------------------------------------ */
+
+/* display: contents lets the items participate directly in the caller's layout
+ * (no extra box in the middle) while the element still provides the Motion
+ * variant context the children read. The container itself animates nothing. */
+.stagger {
+  display: contents;
+}
+
+/* --- Collapsible -------------------------------------------------------- */
+
+/* The height animation needs a clipping box; `clip` (not `hidden`) avoids
+ * creating a scroll container for the collapsed content. */
+.collapsible-inner {
+  overflow: clip;
+}

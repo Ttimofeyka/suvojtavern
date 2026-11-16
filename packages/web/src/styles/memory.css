@@ -1,0 +1,528 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/*
+ * Memory strategy panel (Settings → Memory) — MemoryStrategyPanel.tsx.
+ *
+ * Panel-specific additions to the settings vocabulary in views.css
+ * (strategy cards, settings rows, steppers) plus the two self-playing
+ * strategy demos.
+ *
+ * Demo keyframes animate transform/opacity ONLY, so the global
+ * prefers-reduced-motion kill in base.css stays valid. The kill ends every
+ * animation instantly, which drops the demo elements back onto their base
+ * styles — those double as each strategy's static "end state" poster
+ * (oldest turns already trimmed / compressed away).
+ */
+
+/* --- Strategy cards ------------------------------------------------------------------------------------ */
+
+/* Extends .strategy-option/.strategy-dot/.strategy-label (views.css) with
+    a title + description pair inside the label. */
+.strategy-name {
+  font-weight: var(--fw-body-semibold);
+}
+
+.strategy-desc {
+  display: block;
+  margin-top: 1px;
+  color: var(--fg-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* --- Per-strategy config editors -------------------------------------------------------------------- */
+
+/* Label row above the summarization prompt textarea. */
+.memory-prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --- Strategy demos --------------------------------------------------------------------------------------- */
+/*
+ * The demos loop one self-contained cycle: the stage fades in, the
+ * choreography plays out, and the stage fades out again so the loop
+ * restarts without a visible snap. Children use the same duration so they
+ * stay in sync; timing lives in each keyframe's percentages, never in
+ * animation-delay. Trim runs an 8s cycle; the layered demo takes 11s —
+ * marking, chunking, and the promotion each need room to read. Both cycle
+ * lengths derive from --motion-scale, so "subtle" quickens the loop (and
+ * "off" neutralizes the animations outright, see below).
+ */
+
+.memory-demo {
+  /* Scales with the motion-intensity preference; the base value is the
+     DESIGN.md reference timing. */
+  --demo-cycle: calc(8s * var(--motion-scale));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.memory-demo-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  overflow: hidden;
+  animation: mem-cycle var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+/* A chat message bar. Kept/verbatim bars carry a whisper of the accent. */
+.demo-msg {
+  display: block;
+  height: 9px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+.demo-msg.demo-kept {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+/* --- Demo: trim -------------------------------------------------------------------------------------------------- */
+
+/* Base state ghosts the dropped bars — the reduced-motion poster shows the
+    post-trim history. During the loop the keyframes take them from solid to
+    dropped, oldest first, as the budget sawtooth peaks. */
+.memory-trim .demo-old {
+  opacity: 0.18;
+  animation-duration: var(--demo-cycle);
+  animation-timing-function: var(--ease-in-out);
+  animation-iteration-count: infinite;
+}
+
+/* The pre-gating selectors here sat at specificity (0,3,0), a tie with the
+   design.css `:root[data-motion="off"] .memory-demo *` kill; since
+   memory.css loads after design.css, an ungated rule would win the tie and
+   keep the drop animation alive under motion=off. Adding
+   :root:not([data-motion="off"]) removes the rule from the cascade entirely
+   when motion is off (when it does match, it is (0,5,0)) — so it is
+   order-independent and beats the kill's (0,3,0). */
+:root:not([data-motion="off"]) .memory-trim .demo-old:nth-child(1) {
+  animation-name: mem-drop-1;
+}
+
+:root:not([data-motion="off"]) .memory-trim .demo-old:nth-child(2) {
+  animation-name: mem-drop-2;
+}
+
+:root:not([data-motion="off"]) .memory-trim .demo-old:nth-child(3) {
+  animation-name: mem-drop-3;
+}
+
+/* The meter row: tiny label + a track whose fill grows via scaleX only. */
+.demo-budget {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 3px;
+}
+
+.demo-budget-label {
+  flex: none;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+  white-space: nowrap;
+}
+
+.demo-budget-track {
+  position: relative;
+  flex: 1;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  overflow: hidden;
+}
+
+.demo-budget-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  transform-origin: left center;
+  transform: scaleX(0.55);
+  animation: mem-budget var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+/* --- Demo: layered summaries ------------------------------------------------------------------------------- */
+
+/* The layered choreography runs its own, longer cycle (see the shared demo
+    note above). */
+.memory-layered {
+  --demo-cycle: calc(11s * var(--motion-scale));
+}
+
+/* A chip row with its depth label on the left. */
+.demo-layer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.demo-layer-label {
+  flex: none;
+  width: 44px;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+}
+
+/* Summary chips: the injection-template-wrapped snippet look. Level 0 are
+    neutral, level 1 (the roll-up) is accented. Text-only, so the chip is a
+    block that ellipsizes when the panel gets narrow. */
+.demo-chips {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.demo-chip {
+  display: block;
+  height: 17px;
+  padding: 0 10px;
+  border: var(--hairline);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg-muted);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  line-height: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.demo-chip-l1 {
+  flex: none;
+  max-width: 100%;
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--fg);
+  font-weight: var(--fw-badge);
+}
+
+/* Level-0 chips: equal thirds of the row, surfacing one per chunk as the
+    messages below collapse. The base (reduced-motion poster) SHOWS the
+    chips — one summarized snippet per chunk is the demo's steady state,
+    so the poster band is never blank — while the running keyframes still
+    choreograph them from hidden to visible (their explicit opacity
+    values override the base while the animation runs).
+
+    The pre-gating :nth-child selectors below sat at specificity (0,3,0),
+    tying the design.css `:root[data-motion="off"] .memory-demo *` kill.
+    Since memory.css loads after design.css, an ungated rule would win the
+    tie and keep looping under motion=off. Adding
+    :root:not([data-motion="off"]) removes the rule from the cascade entirely
+    when motion is off (when it does match, it is (0,5,0)) — so it is
+    order-independent and beats the kill's (0,3,0). */
+.memory-layered .demo-chip-l0 {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+:root:not([data-motion="off"]) .memory-layered .demo-chip-l0:nth-child(1) {
+  animation: mem-l0-a var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+:root:not([data-motion="off"]) .memory-layered .demo-chip-l0:nth-child(2) {
+  animation: mem-l0-b var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+:root:not([data-motion="off"]) .memory-layered .demo-chip-l0:nth-child(3) {
+  animation: mem-l0-c var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+:root:not([data-motion="off"]) .memory-layered .demo-chip-l1 {
+  animation: mem-l1-in var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+/* The covered messages: dimmed bars wearing the eye-off mark. The base
+    (reduced-motion poster) shows them already ghosted; the loop replays
+    them getting marked right before the chips surface. */
+.demo-old-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.demo-ghost {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.demo-ghost-bar {
+  display: block;
+  height: 9px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--fg) 14%, transparent);
+  opacity: 0.45;
+  animation: mem-ghost-bar var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+.demo-ghost-icon {
+  flex: none;
+  color: var(--fg-faint);
+  animation: mem-ghost-mark var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+/* Annotation tying the ghost rows to their fate. */
+.demo-note {
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+  animation: mem-note-in var(--demo-cycle) var(--ease-in-out) infinite;
+}
+
+/* The coverage boundary: everything below it stays in the prompt verbatim. */
+.demo-divider {
+  display: block;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.demo-live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.demo-live .demo-msg {
+  flex: 1;
+}
+
+.demo-tag {
+  flex: none;
+  color: var(--fg-faint);
+  font-size: var(--fs-badge);
+  font-weight: var(--fw-micro);
+  letter-spacing: var(--ls-badge);
+}
+
+/* --- Demo keyframes --------------------------------------------------------------------------------------------- */
+
+/* Stage seam: fade the whole demo out at the loop end, back in at the start. */
+@keyframes mem-cycle {
+  0% {
+    opacity: 0;
+  }
+
+  6% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Oldest messages drop out, one per budget peak. */
+@keyframes mem-drop-1 {
+  0%,
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  22%,
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes mem-drop-2 {
+  0%,
+  37% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  44%,
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes mem-drop-3 {
+  0%,
+  59% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  66%,
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* The fill climbs toward "over budget" — each peak drops the next oldest
+    message, and the sawtooth recovers as the trimmed tokens free space. */
+@keyframes mem-budget {
+  0% {
+    transform: scaleX(0.14);
+  }
+
+  14% {
+    transform: scaleX(0.95);
+  }
+
+  24% {
+    transform: scaleX(0.58);
+  }
+
+  36% {
+    transform: scaleX(0.95);
+  }
+
+  46% {
+    transform: scaleX(0.62);
+  }
+
+  58% {
+    transform: scaleX(0.95);
+  }
+
+  68% {
+    transform: scaleX(0.68);
+  }
+
+  88%,
+  100% {
+    transform: scaleX(0.84);
+  }
+}
+
+/* The covered messages ghost: the eye-off mark fades in as the bar dims —
+    the message stays readable, just visibly summarized. */
+@keyframes mem-ghost-bar {
+  0%,
+  10% {
+    opacity: 1;
+  }
+
+  16%,
+  100% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes mem-ghost-mark {
+  0%,
+  10% {
+    opacity: 0;
+  }
+
+  16%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Level-0 snippets surface one per chunk, rising straight out of the
+    ghosted messages below. The first chip also carries the merge away —
+    it holds, then lifts toward layer 1 and dissolves as the promotion
+    lands there. */
+@keyframes mem-l0-a {
+  0%,
+  16% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+
+  22%,
+  40% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.95);
+  }
+}
+
+@keyframes mem-l0-b {
+  0%,
+  22% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+
+  28%,
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mem-l0-c {
+  0%,
+  28% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+
+  34%,
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* The promotion lands: the layer-1 chip pops in with a brief merge pulse
+    (the scale overshoot) as the oldest level-0 chip dissolves upward. */
+@keyframes mem-l1-in {
+  0%,
+  46% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.88);
+  }
+
+  52% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+
+  58%,
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* The annotation joins once the ghosting has played. */
+@keyframes mem-note-in {
+  0%,
+  38% {
+    opacity: 0;
+  }
+
+  46%,
+  100% {
+    opacity: 1;
+  }
+}

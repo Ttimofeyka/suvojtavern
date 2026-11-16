@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+data/*.db*
+data/blobs/
+.env
+coverage/
+*.log
+docs/*.html
+.commandcode/settings.json
