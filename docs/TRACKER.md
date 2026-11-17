@@ -441,12 +441,12 @@ tab and is available even when the selected swipe shows no tracker — the
 other messages and swipes may still have trackers worth clearing.
 
 Deleting messages drops those messages' snapshots with them — the panel
-never shows a deleted message's tracker. The panel then falls back to the
-newest kept tracker among the newest **two** chat positions (the last turn:
-the user's message's tracker or the previous assistant reply's), or to the
-empty state when neither has one. Delete a trailing assistant reply, for
-example, and the panel shows the previous turn's tracker instead of going
-empty. It never reaches back further than those two positions.
+never shows a deleted message's tracker. The panel then shows the newest
+snapshot attached to a **selected swipe**, which is exactly what the prompt
+is fed: delete the trailing reply and the panel falls back to the previous
+turn's tracker; undo several turns and it still shows the newest surviving
+one, however many positions back that sits. It goes empty only when no
+selected message carries a snapshot at all.
 
 ---
 

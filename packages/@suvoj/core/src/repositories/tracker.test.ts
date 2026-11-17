@@ -182,47 +182,6 @@ describe("TrackerRepository swipe-aware reads", () => {
     expect(trackers.getForMessage("nope")).toBe(null);
   });
 
-  it("getLatestWithinLastPositions: the newest snapshot inside the position window", () => {
-    const m1 = addMessage(chatId, "m1");
-    const m2 = addMessage(chatId, "m2");
-    const m3 = addMessage(chatId, "m3");
-    attach(m1, "m1");
-    attach(m2, "m2");
-    attach(m3, "m3-old");
-    attach(m3, "m3-new");
-
-    // The window is raw positions 3–2; the newest snapshot at the newest
-    // windowed position wins, and per message_id only the regenerated one.
-    expect(trackers.getLatestWithinLastPositions(chatId, 2)?.data.marker).toBe("m3-new");
-    expect(trackers.getLatestWithinLastPositions(chatId, 1)?.data.marker).toBe("m3-new");
-    expect(trackers.getLatestWithinLastPositions(chatId, 3)?.data.marker).toBe("m3-new");
-  });
-
-  it("getLatestWithinLastPositions: null when the window carries no snapshot", () => {
-    const m1 = addMessage(chatId, "m1");
-    addMessage(chatId, "m2");
-    addMessage(chatId, "m3");
-    attach(m1, "m1");
-
-    // The newest two positions (3 and 2) are untracked, so the window misses.
-    expect(trackers.getLatestWithinLastPositions(chatId, 2)).toBe(null);
-    // Position 1 only enters the window at three positions.
-    expect(trackers.getLatestWithinLastPositions(chatId, 3)?.data.marker).toBe("m1");
-    expect(trackers.getLatestWithinLastPositions(chatId, 0)).toBe(null);
-    expect(trackers.getLatestWithinLastPositions(chatId, -1)).toBe(null);
-  });
-
-  it("getLatestWithinLastPositions: follows the selected swipe, ignoring inactive siblings", () => {
-    const root = addMessage(chatId, "root");
-    const swipe = messages.addVariant(chatId, root, "swipe");
-    attach(root, "root-snapshot");
-    attach(swipe.id, "swipe-snapshot");
-
-    expect(trackers.getLatestWithinLastPositions(chatId, 1)?.data.marker).toBe("root-snapshot");
-    messages.setActiveVariant(swipe.id);
-    expect(trackers.getLatestWithinLastPositions(chatId, 1)?.data.marker).toBe("swipe-snapshot");
-  });
-
   it("deleteForMessage removes only that message's snapshots", () => {
     const a = addMessage(chatId);
     const b = addMessage(chatId);

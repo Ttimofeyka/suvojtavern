@@ -23,8 +23,8 @@ interface MessageTrackerViewerProps {
  * Read-only modal for ONE message/swipe row's tracker — the hover action's
  * viewer. It fetches the row directly (`GET /api/messages/:id/tracker`), so it
  * shows the swipe's own snapshot even when the tracker master switch is off,
- * its injection count is 0, or the snapshot has aged out of the drawer's
- * fallback window: the snapshot is persisted data, not a live setting.
+ * its injection count is 0, or the snapshot is not the one the drawer panel
+ * currently shows: the snapshot is persisted data, not a live setting.
  *
  * The body has four exclusive states — loading, fetch error, "no tracker for
  * this message", and the rendered snapshot — crossfaded through a wait-mode

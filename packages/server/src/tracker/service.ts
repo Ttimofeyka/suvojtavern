@@ -299,10 +299,10 @@ export interface TrackerSummaryPayload {
 
 /**
  * The shared tracker summary payload: the resolved config flags plus the
- * SELECTED swipe's newest snapshot within the panel's bounded fallback window
- * (the newest two chat positions) and the active schema preset's rendering.
- * Disabled → `snapshot` and `render` null. Used by GET and POST /tracker and
- * the SSE integration.
+ * SELECTED swipe's newest snapshot — the same read the `tracker` pipeline stage
+ * injects from, so the drawer and the prompt never disagree — and the active
+ * schema preset's rendering. Disabled → `snapshot` and `render` null. Used by
+ * GET and POST /tracker and the SSE integration.
  */
 export function trackerSummaryPayload(repos: Repos, chatId: string): TrackerSummaryPayload {
   const config = tracker.getTrackerConfig(repos);
@@ -322,15 +322,14 @@ export function trackerSummaryPayload(repos: Repos, chatId: string): TrackerSumm
       render: null,
     };
   }
-  // The panel shows the newest kept tracker among the newest two chat positions
-  // (the last turn). Bounding the window — rather than paging from the newest
-  // TRACKED position however far back — is the point: after the trailing reply
-  // is deleted the panel falls back to the previous turn's tracker (the user's
-  // message's tracker or the previous assistant reply's) and never to an
-  // arbitrarily old snapshot. With neither of those two positions tracked the
-  // panel is simply empty.
-  const PANEL_FALLBACK_POSITIONS = 2;
-  const latest = repos.trackers.getLatestWithinLastPositions(chatId, PANEL_FALLBACK_POSITIONS);
+  // The panel shows the newest snapshot attached to a SELECTED swipe — the
+  // exact read the pipeline stage injects from (`listForActiveMessages`), so
+  // the card and the prompt can never disagree. That matters after an undo:
+  // deleting the trailing messages leaves the tail untracked while the
+  // surviving tracker (however many positions back) is still what the model is
+  // fed, and a raw-position window would blank the panel on a tracker that is
+  // live in the prompt.
+  const latest = repos.trackers.listForActiveMessages(chatId, 1).at(-1);
   return {
     enabled: true,
     chat_enabled: chatEnabled,

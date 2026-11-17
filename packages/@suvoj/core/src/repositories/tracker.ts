@@ -149,45 +149,6 @@ export class TrackerRepository {
     return row ? parseTrackerSnapshot(row) : null;
   }
 
-  /**
-   * Bounded swipe-aware read for the tracker panel's "last turn" fallback:
-   * the newest snapshot attached to an ACTIVE row whose position is among the
-   * chat's newest `positionCount` POSITIONS. Unlike
-   * {@link listForActiveMessages} — which pages from the newest TRACKED
-   * position however far back that is — the window here is fixed to raw chat
-   * positions and never reaches past it. That window is the point: after the
-   * trailing reply is deleted, the panel falls back to the previous turn's
-   * tracker rather than some arbitrarily old snapshot that merely happens to
-   * be the newest one still attached. The join already drops snapshots whose
-   * message row was deleted, and `m.active = 1` drops inactive siblings, so
-   * neither needs an extra guard.
-   *
-   * The newest snapshot per `message_id` is resolved first, so a swipe that
-   * was regenerated returns only its current tracker. `positionCount` ≤ 0 →
-   * null (SQLite has no `LIMIT` that means "none").
-   */
-  getLatestWithinLastPositions(chatId: string, positionCount: number): TrackerSnapshot | null {
-    if (positionCount <= 0) {
-      return null;
-    }
-    const row = stmt<TrackerSnapshotRow>(
-      this.db,
-      `SELECT t.* FROM tracker_snapshots t
-       JOIN messages m ON m.id = t.message_id AND m.chat_id = t.chat_id
-       WHERE t.chat_id = ? AND m.active = 1
-         AND m.seq IN (
-           SELECT seq FROM messages WHERE chat_id = ?
-           GROUP BY seq ORDER BY seq DESC LIMIT ?
-         )
-         AND t.id = (SELECT t2.id FROM tracker_snapshots t2
-                     WHERE t2.message_id = t.message_id AND t2.chat_id = t.chat_id
-                     ORDER BY t2.seq DESC, t2.rowid DESC LIMIT 1)
-       ORDER BY m.seq DESC, t.rowid DESC
-       LIMIT 1`,
-    ).get(chatId, chatId, positionCount);
-    return row ? parseTrackerSnapshot(row) : null;
-  }
-
   /** Deletes every snapshot attached to one message row; returns the count. */
   deleteForMessage(messageId: string): number {
     return stmt(this.db, "DELETE FROM tracker_snapshots WHERE message_id = ?").run(messageId)

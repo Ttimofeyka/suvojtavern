@@ -697,7 +697,7 @@ describe("message-deletion → tracker cascade through createApp", () => {
   });
 });
 
-describe("tracker panel fallback window", () => {
+describe("tracker panel fallback", () => {
   it("falls back to the previous turn's tracker after the trailing reply is deleted", async () => {
     const { app, repos, chatId } = await setup({ userMessages: 0 });
     const post = (role: "user" | "assistant", content: string) =>
@@ -731,9 +731,7 @@ describe("tracker panel fallback window", () => {
     await flushCascade();
     expect(repos.trackers.getForMessage(a2?.id ?? "")).toBeNull();
 
-    // The bounded window (the newest two positions = U2 and A1) surfaces A1's
-    // surviving tracker — never the deleted A2's id, and never a stale older
-    // one.
+    // The panel surfaces A1's surviving tracker — never the deleted A2's id.
     const body = (await (await app.request(`/api/chats/${chatId}/tracker`)).json()) as {
       snapshot: { message_id: string | null } | null;
     };
@@ -746,28 +744,105 @@ describe("tracker panel fallback window", () => {
     expect(rows[0]?.message_id).toBe(a1?.id);
   });
 
-  it("is empty when the newest kept tracker sits outside the newest two positions", async () => {
+  it("keeps the surviving tracker after undoing several messages past the tracked tail", async () => {
+    // An undo of more than one turn leaves the tail untracked several
+    // positions after the newest snapshot. The panel must still surface it:
+    // the same read feeds the prompt, so blanking the card would show "no
+    // tracker" while the model keeps receiving that state.
     const { app, repos, chatId } = await setup({ userMessages: 0 });
     const post = (role: "user" | "assistant", content: string) =>
       app.request(`/api/chats/${chatId}/messages`, jsonInit("POST", { role, content }));
 
-    // A tracked assistant reply (A1) followed by two newer UNTRACKED messages:
-    // the chat's newest two positions then carry no snapshot at all.
+    expect((await post("user", "U1")).status).toBe(201);
+    expect((await post("assistant", "A1")).status).toBe(201);
+    const a1 = repos.messages.listActive(chatId).at(-1);
+    expect(
+      (await app.request(`/api/chats/${chatId}/tracker/generate`, { method: "POST" })).status,
+    ).toBe(200);
+
+    // Two more untracked turns after the tracked reply, then undo all four
+    // trailing messages: the chat ends at A1.
+    expect((await post("user", "U2")).status).toBe(201);
+    expect((await post("assistant", "A2")).status).toBe(201);
+    expect((await post("user", "U3")).status).toBe(201);
+    expect((await post("assistant", "A3")).status).toBe(201);
+    const u2 = repos.messages.listActive(chatId).find((message) => message.content === "U2");
+    if (!u2) {
+      throw new Error("expected U2");
+    }
+    const del = await app.request(
+      `/api/chats/${chatId}/messages/delete-from`,
+      jsonInit("POST", { from_seq: u2.seq }),
+    );
+    expect(del.status).toBe(200);
+    await flushCascade();
+
+    // A1 is the tail now; its tracker is 3 positions back but still selected.
+    expect(repos.trackers.listForActiveMessages(chatId, 1).at(-1)?.message_id).toBe(a1?.id);
+    const body = (await (await app.request(`/api/chats/${chatId}/tracker`)).json()) as {
+      snapshot: { message_id: string | null } | null;
+    };
+    expect(body.snapshot?.message_id).toBe(a1?.id);
+  });
+
+  it("shows the newest tracker when the tail is a user message", async () => {
+    // before_reply/manual runs attach to a user tail; an assistant reply that
+    // followed it is deleted, so the user message becomes the tail again. The
+    // panel must show the newest snapshot the prompt is fed.
+    const { app, repos, chatId } = await setup({ userMessages: 0 });
+    const post = (role: "user" | "assistant", content: string) =>
+      app.request(`/api/chats/${chatId}/messages`, jsonInit("POST", { role, content }));
+
+    expect((await post("user", "U1")).status).toBe(201);
+    expect((await post("assistant", "A1")).status).toBe(201);
+    const a1 = repos.messages.listActive(chatId).at(-1);
+    expect(
+      (await app.request(`/api/chats/${chatId}/tracker/generate`, { method: "POST" })).status,
+    ).toBe(200);
+    expect((await post("user", "U2")).status).toBe(201);
+
+    // U2 is the tail and carries no snapshot; A1's is the newest active one.
+    let body = (await (await app.request(`/api/chats/${chatId}/tracker`)).json()) as {
+      snapshot: { message_id: string | null } | null;
+    };
+    expect(body.snapshot?.message_id).toBe(a1?.id);
+
+    // Deleting A1's position leaves U2 as the tail with nothing to show.
+    expect((await app.request(`/api/messages/${a1?.id}`, { method: "DELETE" })).status).toBe(200);
+    await flushCascade();
+    body = (await (await app.request(`/api/chats/${chatId}/tracker`)).json()) as {
+      snapshot: { message_id: string | null } | null;
+    };
+    expect(body.snapshot).toBeNull();
+  });
+
+  it("is empty when no active row carries a snapshot", async () => {
+    const { app, repos, chatId } = await setup({ userMessages: 0 });
+    const post = (role: "user" | "assistant", content: string) =>
+      app.request(`/api/chats/${chatId}/messages`, jsonInit("POST", { role, content }));
+
+    // A tracked assistant reply, then a newer turn generated with the tracker
+    // switched off: the only snapshot sits on an older position and the panel
+    // reports it (it is still what injection reads), never the empty state.
     expect((await post("user", "U1")).status).toBe(201);
     expect((await post("assistant", "A1")).status).toBe(201);
     expect(
       (await app.request(`/api/chats/${chatId}/tracker/generate`, { method: "POST" })).status,
     ).toBe(200);
     expect(repos.trackers.listByChat(chatId)).toHaveLength(1);
-    expect((await post("user", "U2")).status).toBe(201);
-    expect((await post("assistant", "A2")).status).toBe(201);
 
-    // The panel window is bounded to raw positions, so it is simply empty —
-    // even though the tracker row still exists in the DB.
+    // Delete the tracked reply: its snapshot goes with it, leaving the
+    // untracked user message as the tail — the panel is genuinely empty.
+    const a1 = repos.messages.listActive(chatId).find((message) => message.content === "A1");
+    if (!a1) {
+      throw new Error("expected A1");
+    }
+    expect((await app.request(`/api/messages/${a1.id}`, { method: "DELETE" })).status).toBe(200);
+    await flushCascade();
+
     const body = (await (await app.request(`/api/chats/${chatId}/tracker`)).json()) as {
       snapshot: { message_id: string | null } | null;
     };
     expect(body.snapshot).toBeNull();
-    expect(repos.trackers.listByChat(chatId)).toHaveLength(1);
   });
 });
