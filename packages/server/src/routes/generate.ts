@@ -106,7 +106,8 @@ export function generateRoutes(deps: RouteDeps): Hono {
       // `ok: false` with the error message. `messageId` names the swipe the
       // snapshot attaches to; `null` (the before_reply/manual case) lets the
       // service resolve the CURRENT tail's active message. after_reply passes
-      // the persisted reply's id.
+      // the persisted reply's id; after_user_message passes the PREVIOUS
+      // reply (the service scopes the tracker prompt through it).
       // The `tracking` status is the CALLER's job (see the parallel tail
       // below): it is written before the work starts so the event order never
       // depends on which concurrent step finishes first. A tracker failure
@@ -186,6 +187,25 @@ export function generateRoutes(deps: RouteDeps): Hono {
           // reply proceeds. `trackerOnForChat` folds in the per-chat switch.
           if (trackerOnForChat && trackerConfig.auto_mode === "before_reply") {
             await emitTracker(null);
+          }
+          // after_user_message: the client has just persisted the new user
+          // turn, and the state worth tracking is the one its reply left
+          // behind — so track the PREVIOUS position and let the service scope
+          // the tracker prompt through it (the new user turn is never part of
+          // the tracker's context). It runs before prompt assembly, so this
+          // reply sees the fresh snapshot. A regenerate/continue leaves an
+          // assistant tail and tracks nothing; an already-tracked reply is
+          // skipped, so retries and mode switches never pay twice.
+          if (trackerOnForChat && trackerConfig.auto_mode === "after_user_message") {
+            const active = deps.repos.messages.listActive(chatId);
+            const previous = active.at(-2);
+            if (
+              active.at(-1)?.role === "user" &&
+              previous !== undefined &&
+              deps.repos.trackers.getForMessage(previous.id) === null
+            ) {
+              await emitTracker(previous.id);
+            }
           }
           const prepared = await engine.prepareGeneration({
             repos: deps.repos,

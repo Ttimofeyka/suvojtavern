@@ -132,8 +132,15 @@ export const trackerConfigSchema = z.object({
   enabled: z.boolean().catch(false),
   /** Mechanism id (built-in `suvoj-tracker` or plugin-registered). */
   mechanism: z.string().catch("suvoj-tracker"),
-  /** When a new tracker snapshot is generated. */
-  auto_mode: z.enum(["after_reply", "before_reply", "manual"]).catch("after_reply"),
+  /**
+   * When a new tracker snapshot is generated. `after_user_message` is the
+   * lazy variant: when the user advances the conversation, the PREVIOUS
+   * reply is tracked with the prompt scoped through it (the new user turn is
+   * never included), so discarded swipes and abandoned replies cost nothing.
+   */
+  auto_mode: z
+    .enum(["after_reply", "before_reply", "after_user_message", "manual"])
+    .catch("after_reply"),
   /** Connection profile for the tracker generator; '' → default profile. */
   profile_id: z.string().catch(""),
   system_prompt: z.string().catch(DEFAULT_TRACKER_SYSTEM_PROMPT),

@@ -206,6 +206,103 @@ describe("POST /api/chats/:id/generate (tracker auto modes)", () => {
     expect(repos.trackers.listByChat(chatId)).toEqual([]);
   });
 
+  it("after_user_message: tracks the previous reply when the user advances, scoping out the new turn", async () => {
+    const opening = { time: "10:00:00; 01/01/2026 (Thursday)", location: "opening-scene" };
+    const next = { time: "11:00:00; 01/01/2026 (Thursday)", location: "next-scene" };
+    const { app, repos, bodies, chatId } = await setup({
+      trackerConfig: { auto_mode: "after_user_message" },
+      respond: (call) => {
+        if (call === 1) return trackerReply(opening); // greeting's tracker, at the first user turn
+        if (call === 2) return generationReply(); // reply A
+        if (call === 3) return trackerReply(next); // reply A's tracker, at the second user turn
+        return generationReply(); // reply B (and the regenerate)
+      },
+    });
+    const greetingId = repos.messages.listActive(chatId)[0]?.id;
+    if (greetingId === undefined) {
+      throw new Error("expected a greeting");
+    }
+    expect(repos.messages.listActive(chatId).at(-1)?.role).toBe("user");
+
+    // First turn: the just-sent user turn triggers a tracker for the PREVIOUS
+    // active message (the greeting), before prompt assembly.
+    const first = await generate(app, chatId);
+    expect(stagesOf(first.events)).toEqual(["preparing", "tracking", "prompt"]);
+    const firstTracker = first.events.find((e) => e.type === "tracker") as {
+      ok: boolean;
+      snapshot: { message_id: string | null; data: unknown };
+    };
+    expect(firstTracker.ok).toBe(true);
+    expect(firstTracker.snapshot.message_id).toBe(greetingId);
+    expect(firstTracker.snapshot.data).toEqual(opening);
+    // The tracker prompt stops at the previous message: the just-sent user
+    // turn ("Hi Aria") is not in it.
+    expect(JSON.stringify(bodies[0])).toContain("Hello!");
+    expect(JSON.stringify(bodies[0])).not.toContain("Hi Aria");
+    // ...and the reply's prompt carries the fresh snapshot.
+    expect(JSON.stringify(bodies[1])).toContain("opening-scene");
+    const replyAId = (first.events.find((e) => e.type === "done") as { message_id: string })
+      .message_id;
+
+    // Second turn: the new user message tracks reply A, again scoped through
+    // it — older history is included, the new turn is not.
+    const posted = await app.request(
+      `/api/chats/${chatId}/messages`,
+      jsonInit("POST", { role: "user", content: "Second turn" }),
+    );
+    expect(posted.status).toBe(201);
+    const second = await generate(app, chatId);
+    const secondTracker = second.events.find((e) => e.type === "tracker") as {
+      ok: boolean;
+      snapshot: { message_id: string | null; data: unknown };
+    };
+    expect(secondTracker.ok).toBe(true);
+    expect(secondTracker.snapshot.message_id).toBe(replyAId);
+    expect(secondTracker.snapshot.data).toEqual(next);
+    expect(JSON.stringify(bodies[2])).toContain("Hi there");
+    expect(JSON.stringify(bodies[2])).toContain("Hi Aria");
+    expect(JSON.stringify(bodies[2])).not.toContain("Second turn");
+    // The reply generated on this turn receives the fresh snapshot.
+    expect(JSON.stringify(bodies[3])).toContain("next-scene");
+
+    // A regenerate has no new user turn, so it costs no tracker call and emits
+    // no tracker event — the saving this mode exists for.
+    const regenerated = await generate(app, chatId, { regenerate: true });
+    expect(regenerated.events.find((e) => e.type === "tracker")).toBeUndefined();
+    expect(bodies).toHaveLength(5);
+  });
+
+  it("after_user_message: skips a reply that already carries a snapshot", async () => {
+    // Turn 1 runs the default after_reply cadence, so the reply is tracked
+    // immediately (calls 1 and 2).
+    const { app, repos, bodies, chatId } = await setup({
+      respond: (call) => (call === 1 ? generationReply() : trackerReply()),
+    });
+    const first = await generate(app, chatId);
+    const replyId = (first.events.find((e) => e.type === "done") as { message_id: string })
+      .message_id;
+    expect(repos.trackers.getForMessage(replyId)).not.toBeNull();
+    expect(bodies).toHaveLength(2);
+
+    // Switching to after_user_message and advancing the chat must not re-buy
+    // the tracker the reply already owns: one generation call, no tracker
+    // event.
+    repos.settings.set("tracker_config", {
+      enabled: true,
+      auto_mode: "after_user_message",
+    });
+    const posted = await app.request(
+      `/api/chats/${chatId}/messages`,
+      jsonInit("POST", { role: "user", content: "Next" }),
+    );
+    expect(posted.status).toBe(201);
+    const second = await generate(app, chatId);
+    expect(second.events.find((e) => e.type === "tracker")).toBeUndefined();
+    expect(stagesOf(second.events)).toEqual(["preparing", "prompt"]);
+    expect(bodies).toHaveLength(3);
+    expect(repos.trackers.listByChat(chatId)).toHaveLength(1);
+  });
+
   it("a failing tracker generation never breaks the main stream", async () => {
     const { app, repos, chatId } = await setup({
       // The tracker call (2) answers with unparseable garbage.

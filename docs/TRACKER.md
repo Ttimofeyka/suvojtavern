@@ -81,6 +81,7 @@ resumes.
 |---|---|---|
 | **After reply** (default) | right after the model's reply completes — the snapshot reflects the latest exchange | the persisted reply's own swipe |
 | **Before reply** | just before the next generation, so the freshest possible snapshot is in the prompt for that reply | the current tail's active message (the reply does not exist yet) |
+| **After user message** | when you send the next message — the previous reply is tracked, so the snapshot reflects the exchange that turn left behind | the previous position's selected swipe (the new user turn is not part of the tracker prompt) |
 | **Manual** | never automatically — you decide when | the current tail's active message |
 
 Whatever the mode, the **generate action in the tracker panel** runs a
@@ -95,6 +96,20 @@ active, that old swipe's tracker is no longer the selected one, so the panel
 falls back to an older position or the empty state, even though the
 just-generated snapshot was fed into the reply's prompt. Use **After reply**
 (the default) if you want each swipe to own its tracker.
+
+**`after_user_message` is the lazy cadence.** It produces the same snapshot
+`after_reply` would have produced for the previous reply, but only once you
+actually continue the conversation — the tracker prompt stops at that reply,
+so the message you just sent is never part of it. Regenerating or swiping a
+reply therefore costs no tracker calls: only the swipe you settle on gets
+tracked, when you send the next message. A reply that already carries a
+snapshot on its selected swipe is left alone, so retries and mode switches
+never pay twice. In a plain one-reply-per-turn chat the number of calls
+matches `after_reply`; the saving comes from discarded swipes,
+regenerations, and replies you never continue. The trade-off is latency: the
+tracker call runs before the reply is assembled so the fresh snapshot is
+included in that prompt (unlike `after_reply`, which tracks after the reply).
+The newest reply stays untracked until you send the next message.
 
 ---
 
@@ -120,10 +135,10 @@ switch or an injection count of `0`, never by invisible mode.)
 
 ## Generation indicator
 
-While a snapshot is being generated — automatically in `after_reply` or
-`before_reply` mode, or from the panel's generate action — a small status
-pill appears at the top of the chat, in the chat header next to the
-streaming and summarizing pills. It uses the same `.pill` styling and
+While a snapshot is being generated — automatically in `after_reply`,
+`before_reply`, or `after_user_message` mode, or from the panel's generate
+action — a small status pill appears at the top of the chat, in the chat
+header next to the streaming and summarizing pills. It uses the same `.pill` styling and
 shows a label (`Tracking…` by default) with an optional pulsing dot. The
 indicator is configured in **Settings → Chat**, separate from the tracker
 config in **Settings → Tracker**:
@@ -488,6 +503,12 @@ drawer's tab management.
 
 **Snapshots never update on their own.** If auto mode is **manual**,
 generation only happens when you use the panel's generate action.
+
+**A reply has no tracker until I send the next message.** Expected in
+`after_user_message` mode: the previous reply is tracked when the
+conversation advances, and the snapshot lands on its selected swipe.
+Regenerating or swiping that reply costs nothing — only the swipe you settle
+on is tracked, when you continue the chat.
 
 **The card stays dark under a light theme.** What paints the panel is the
 active preset's own CSS, and a stylesheet that hardcodes its colors beats the

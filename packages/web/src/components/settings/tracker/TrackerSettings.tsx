@@ -22,10 +22,11 @@ import { StepperRow } from "../Stepper";
 import DrawerTabsCard from "./DrawerTabsCard";
 import SchemaPresetsCard from "./SchemaPresetsCard";
 
-/** When the tracker runs relative to the model's reply. */
+/** When the tracker runs relative to the conversation. */
 const AUTO_MODES = [
   { id: "after_reply", name: "After reply" },
   { id: "before_reply", name: "Before reply" },
+  { id: "after_user_message", name: "After user message" },
   { id: "manual", name: "Manual only" },
 ] as const;
 
@@ -288,7 +289,10 @@ export default function TrackerSettings() {
                 <div className="set-row">
                   <span className="set-row-main">
                     <span className="set-row-label">Auto mode</span>
-                    <span className="set-row-hint">When a new snapshot is generated.</span>
+                    <span className="set-row-hint">
+                      When a new snapshot is generated. After user message waits for you to
+                      continue, so discarded swipes and abandoned replies cost nothing.
+                    </span>
                   </span>
                   <select
                     className="select tracker-select"

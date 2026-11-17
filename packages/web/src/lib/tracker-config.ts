@@ -56,7 +56,12 @@ export interface TrackerConfig {
   enabled: boolean;
   /** Mechanism id (built-in `suvoj-tracker` or plugin-registered). */
   mechanism: string;
-  auto_mode: "after_reply" | "before_reply" | "manual";
+  /**
+   * `after_user_message` is the lazy cadence: when the user advances the
+   * conversation, the PREVIOUS reply is tracked (prompt scoped through it),
+   * so discarded swipes and abandoned replies cost nothing.
+   */
+  auto_mode: "after_reply" | "before_reply" | "after_user_message" | "manual";
   /** Connection profile for the tracker generator; "" → default profile. */
   profile_id: string;
   system_prompt: string;
@@ -535,7 +540,10 @@ function readFormat(
 
 function readAutoMode(record: Record<string, unknown> | undefined): TrackerConfig["auto_mode"] {
   const value = record?.auto_mode;
-  return value === "after_reply" || value === "before_reply" || value === "manual"
+  return value === "after_reply" ||
+    value === "before_reply" ||
+    value === "after_user_message" ||
+    value === "manual"
     ? value
     : "after_reply";
 }

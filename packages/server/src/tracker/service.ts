@@ -49,14 +49,17 @@ export interface ChatContext {
  * persona (by `chat.persona_id`), plus the ACTIVE-variant history
  * (`repos.messages.listActive` — the same single source of truth
  * `engine.prepareGeneration` assembles from), windowed to the newest
- * `includeLastMessages` messages (0 = all). Returns null when the chat is
- * unknown. Shared by the tracker service and the plugin host's panel-data
- * surface — do NOT invent a second variant filter.
+ * `includeLastMessages` messages (0 = all). `throughSeq` bounds the history
+ * to positions at or before that chat position (inclusive), which the
+ * `after_user_message` mode uses to track the PREVIOUS reply while the new
+ * user turn is already persisted. Returns null when the chat is unknown.
+ * Shared by the tracker service and the plugin host's panel-data surface —
+ * do NOT invent a second variant filter.
  */
 export function loadChatContext(
   repos: Repos,
   chatId: string,
-  opts?: { includeLastMessages?: number },
+  opts?: { includeLastMessages?: number; throughSeq?: number },
 ): ChatContext | null {
   const chat = repos.chats.get(chatId);
   if (!chat) {
@@ -65,8 +68,11 @@ export function loadChatContext(
   const character = repos.characters.get(chat.character_id) ?? null;
   const persona = chat.persona_id ? (repos.personas.get(chat.persona_id) ?? null) : null;
   const history = repos.messages.listActive(chat.id);
+  const throughSeq = opts?.throughSeq;
+  const scoped =
+    throughSeq === undefined ? history : history.filter((message) => message.seq <= throughSeq);
   const includeLast = opts?.includeLastMessages ?? 0;
-  const window = includeLast > 0 ? history.slice(-includeLast) : history;
+  const window = includeLast > 0 ? scoped.slice(-includeLast) : scoped;
   return {
     chat,
     character,
@@ -99,11 +105,15 @@ export interface TrackerGenerateResult {
  *
  * Swipe-aware attachment: the snapshot lands on ONE message ROW. `opts.
  * message_id` names it explicitly (the after_reply path passes the persisted
- * reply's id); otherwise the current tail's ACTIVE message is the target (the
- * manual and before_reply paths). The `previousTrackers` handed to the model
- * are the SELECTED-swipe trackers of positions STRICTLY BEFORE the target's
- * `seq`, so a regenerated/new swipe generates from zero — its own sibling
- * group (including the tracker of the swipe it replaces) is never fed back.
+ * reply's id; after_user_message passes the reply the new user turn
+ * follows); otherwise the current tail's ACTIVE message is the target (the
+ * manual and before_reply paths). An explicit target ALSO bounds the tracker
+ * prompt to history at or before its position, so a target behind the tail
+ * never sees messages sent after it. The `previousTrackers` handed to the
+ * model are the SELECTED-swipe trackers of positions STRICTLY BEFORE the
+ * target's `seq`, so a regenerated/new swipe generates from zero — its own
+ * sibling group (including the tracker of the swipe it replaces) is never
+ * fed back.
  *
  * The active schema preset's `parts` config resolves the generation into
  * one or more REQUESTS (see `buildTrackerParts`). A mechanism that declares
@@ -130,35 +140,46 @@ export async function generateTrackerSnapshot(
   if (!config.enabled) {
     throw new TrackerRequestError("Tracker is disabled");
   }
-  const context = loadChatContext(deps.repos, chatId, {
-    includeLastMessages: config.include_last_messages,
-  });
-  if (!context) {
+  const chat = deps.repos.chats.get(chatId);
+  if (!chat) {
     throw new TrackerRequestError("Chat not found");
   }
   // The per-chat switch: the global config is the master, this column lets one
   // chat opt out. Checked after the config gate so the two failure classes
   // stay distinct (global off vs. this chat off).
-  if (!context.chat.tracker_enabled) {
+  if (!chat.tracker_enabled) {
     throw new TrackerRequestError("Tracker is disabled for this chat");
-  }
-  if (context.messages.length === 0) {
-    throw new TrackerRequestError("No messages to track yet");
   }
 
   // The swipe this snapshot attaches to. An explicit `message_id` wins (the
-  // after_reply path passes the persisted reply's id); otherwise the target is
-  // the current tail's ACTIVE message — the guard above proved the active
-  // history is non-empty. The row must exist AND belong to this chat: a stale
-  // or foreign id would persist an orphan snapshot the swipe-aware reads can
+  // after_reply path passes the persisted reply's id; after_user_message
+  // passes the previous reply); otherwise the target is the current tail's
+  // ACTIVE message. The row must exist AND belong to this chat: a stale or
+  // foreign id would persist an orphan snapshot the swipe-aware reads can
   // never surface.
-  const targetId =
-    typeof opts?.message_id === "string"
-      ? opts.message_id
-      : deps.repos.messages.listActive(chatId).at(-1)?.id;
-  const target = targetId ? deps.repos.messages.get(targetId) : null;
+  const active = deps.repos.messages.listActive(chatId);
+  const targetId = typeof opts?.message_id === "string" ? opts.message_id : active.at(-1)?.id;
+  if (!targetId) {
+    throw new TrackerRequestError("No messages to track yet");
+  }
+  const target = deps.repos.messages.get(targetId);
   if (!target || target.chat_id !== chatId) {
     throw new TrackerRequestError("Message not found");
+  }
+
+  // The prompt is read THROUGH the target's position. For after_reply the
+  // target is the tail, so this is the full active history (unchanged); for
+  // after_user_message the target sits one position behind the just-persisted
+  // user turn, which therefore never enters the tracker's context.
+  const context = loadChatContext(deps.repos, chatId, {
+    includeLastMessages: config.include_last_messages,
+    throughSeq: target.seq,
+  });
+  if (!context) {
+    throw new TrackerRequestError("Chat not found");
+  }
+  if (context.messages.length === 0) {
+    throw new TrackerRequestError("No messages to track yet");
   }
 
   let mechanism = tracker.getTrackerMechanism(config.mechanism);
